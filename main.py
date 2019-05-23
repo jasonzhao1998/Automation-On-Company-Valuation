@@ -2,15 +2,14 @@ import os
 import numpy as np
 import pandas as pd
 
-FILENAME = "Nvidia.xlsx"
-
 
 def main():
-    df = pd.read_excel('asset/' + FILENAME, header=4, index_col=0)
-    print(df)
-    print(df.dtypes)
-    print(df.index)
-    print(df.columns)
+    cash_flow = pd.read_excel('asset/NVIDIA Cash Flow.xlsx', header=4, index_col=0)
+    income_statement = pd.read_excel('asset/NVIDIA Income Statement.xlsx', header=4, index_col=0)
+    balance_sheet = pd.read_excel('asset/NVIDIA Balance Sheet.xlsx', header=4, index_col=0)
+    print(cash_flow)
+    print(income_statement)
+    print(balance_sheet)
 
 if __name__ == "__main__":
     main()
