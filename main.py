@@ -1,6 +1,18 @@
 import os
+import time
 import numpy as np
 import pandas as pd
+
+
+def searched_label(labels, target):
+    score_dict = {label: 0 for label in labels}
+
+    for word in target.split():
+        for label in labels:
+            if word in label.lower():
+                score_dict[label] += 1
+    # FIXME what to return during a break-even point
+    return max(score_dict.items(), key=lambda pair: pair[1])[0]
 
 
 def preprocess(df):
@@ -8,7 +20,7 @@ def preprocess(df):
     df = df.loc[:, ::-1]
 
     # Drop rows with elements that are all NaN
-    df = df.dropna(how='all')
+    # df = df.dropna(how='all')
 
     # Replace all '-' with 0
     df = df.replace('-', 0)
@@ -17,8 +29,8 @@ def preprocess(df):
     if df.iat[0, -1] == 'LTM':
         df = df.iloc[:, :-1]
 
-    # Remove rows with label NaN
-    df = df[df.index.notna()]
+    # Remove the row with number of days
+    df = df[1:]
 
     # Change dates to only years
     df.columns = [
@@ -27,25 +39,30 @@ def preprocess(df):
     return df
 
 
-def append_year_columns(df, years_to_predict):
-    for i in range(years_to_predict):
-        cur_year = df.columns[len(df.columns) - 1]
-        if cur_year[-1] == 'E':
-            cur_year = str(int(cur_year[:-1]) + 1) + 'E'
-        else:
-            cur_year = str(int(cur_year) + 1) + 'E'
-        df.insert(len(df.columns), cur_year, 0)
+def append_year_column(df):
+    cur_year = df.columns[len(df.columns) - 1]
+    if cur_year[-1] == 'E':
+        cur_year = str(int(cur_year[:-1]) + 1) + 'E'
+    else:
+        cur_year = str(int(cur_year) + 1) + 'E'
+    df.insert(len(df.columns), cur_year, 0)
 
 
-def append_next_income_statement(income_statement, growth_rates):
-    return income_statement
+def append_next_income_statement(income_df, growth_rate):
+    append_year_column(income_df)
+    row_labels = income_df.index
+    cur_year = income_df.columns[-1]
+    income_df.at[searched_label(row_labels, "sales"), cur_year] = 100
+    return income_df
 
 
-def append_next_balance_sheet(income_statement, balance_sheet, growth_rates):
+def append_next_balance_sheet(income_statement, balance_sheet, growth_rate):
+    append_year_column(balance_sheet)
     return balance_sheet
 
 
-def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates):
+def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate):
+    append_year_column(cash_flow)
     return cash_flow
 
 
@@ -59,24 +76,20 @@ def main():
     cash_flow = preprocess(cash_flow)
 
     # FIXME temporary slices of data
-    income_statement = income_statement[:13]
-    balance_sheet = balance_sheet[:25]
-    cash_flow = cash_flow[:20]
+    income_statement = income_statement[:14]
+    balance_sheet = balance_sheet[:31]
+    cash_flow = cash_flow[:26]
 
     # FIXME temporary parameters
-    growth_rates = []
-    years_to_predict = 5
-
-    # Append empty year columns
-    append_year_columns(income_statement, years_to_predict)
-    append_year_columns(balance_sheet, years_to_predict)
-    append_year_columns(cash_flow, years_to_predict)
+    growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
+    years_to_predict = len(growth_rates)
 
     for i in range(years_to_predict):
-        income_statement = append_next_income_statement(income_statement, growth_rates)
-        balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rates)
-        cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates)
-
+        growth_rate = growth_rates[i]
+        income_statement = append_next_income_statement(income_statement, growth_rate)
+        balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rate)
+        cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate)
+    print(income_statement)
     with pd.ExcelWriter('output.xlsx') as writer:
         income_statement.to_excel(writer, sheet_name='Income Statement')
         balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
