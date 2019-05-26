@@ -1,48 +1,87 @@
 import os
-import xlsxwriter
-from openpyxl import load_workbook
 import numpy as np
 import pandas as pd
 
 
-def test1():
-    df = pd.read_excel('pandas_simple.xlsx')
-    sum_row = df[["A", "B"]].T.sum()
-    print(sum_row)
-    df["C"] = sum_row
-    print(df)
-    df.to_excel("idk.xlsx")
+def preprocess(df):
+    # Reverse columns
+    df = df.loc[:, ::-1]
+
+    # Drop rows with elements that are all NaN
+    df = df.dropna(how='all')
+
+    # Replace all '-' with 0
+    df = df.replace('-', 0)
+
+    # Delete current data
+    if df.iat[0, -1] == 'LTM':
+        df = df.iloc[:, :-1]
+
+    # Remove rows with label NaN
+    df = df[df.index.notna()]
+
+    # Change dates to only years
+    df.columns = [
+        '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
+    ]
+    return df
 
 
-def test():
-    df = pd.DataFrame({'A': range(1, 6), 'B': range(10, 0, -2)})
-    writer = pd.ExcelWriter('pandas_simple.xlsx', engine='xlsxwriter')
-    df.to_excel(writer, sheet_name='Sheet1')
-    workbook  = writer.book
-    worksheet = writer.sheets['Sheet1']
+def append_year_columns(df, years_to_predict):
+    for i in range(years_to_predict):
+        cur_year = df.columns[len(df.columns) - 1]
+        if cur_year[-1] == 'E':
+            cur_year = str(int(cur_year[:-1]) + 1) + 'E'
+        else:
+            cur_year = str(int(cur_year) + 1) + 'E'
+        df.insert(len(df.columns), cur_year, 0)
 
-    worksheet.write_formula('D1', 'D')
-    worksheet.write_formula('D2', '=SUM(B2, C2)')
-    worksheet.write_formula('D3', '=SUM(B3, C3)')
-    writer.save()
 
-    #df.eval('C = A + B', inplace=True)
+def append_next_income_statement(income_statement, growth_rates):
+    return income_statement
+
+
+def append_next_balance_sheet(income_statement, balance_sheet, growth_rates):
+    return balance_sheet
+
+
+def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates):
+    return cash_flow
 
 
 def main():
-    cash_flow = pd.read_excel('asset/NVIDIA Cash Flow.xlsx', header=4, index_col=0)
     income_statement = pd.read_excel('asset/NVIDIA Income Statement.xlsx', header=4, index_col=0)
     balance_sheet = pd.read_excel('asset/NVIDIA Balance Sheet.xlsx', header=4, index_col=0)
-    print(cash_flow)
-    print(income_statement)
-    print(balance_sheet)
+    cash_flow = pd.read_excel('asset/NVIDIA Cash Flow.xlsx', header=4, index_col=0)
+
+    income_statement = preprocess(income_statement)
+    balance_sheet = preprocess(balance_sheet)
+    cash_flow = preprocess(cash_flow)
+
+    # FIXME temporary slices of data
+    income_statement = income_statement[:13]
+    balance_sheet = balance_sheet[:25]
+    cash_flow = cash_flow[:20]
+
+    # FIXME temporary parameters
+    growth_rates = []
+    years_to_predict = 5
+
+    # Append empty year columns
+    append_year_columns(income_statement, years_to_predict)
+    append_year_columns(balance_sheet, years_to_predict)
+    append_year_columns(cash_flow, years_to_predict)
+
+    for i in range(years_to_predict):
+        income_statement = append_next_income_statement(income_statement, growth_rates)
+        balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rates)
+        cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates)
+
+    with pd.ExcelWriter('output.xlsx') as writer:
+        income_statement.to_excel(writer, sheet_name='Income Statement')
+        balance_sheet.to_excel(writer, sheet_name='Balance Sheet')
+        cash_flow.to_excel(writer, sheet_name='Cashflow Statement')
+
 
 if __name__ == "__main__":
-    test()
-    wb = load_workbook(filename = 'pandas_simple.xlsx')
-    sheet_names = wb.get_sheet_names()
-    name = sheet_names[0]
-    sheet_ranges = wb[name]
-    df = pd.DataFrame(sheet_ranges.values)
-    print(df)
-    # main()
+    main()
