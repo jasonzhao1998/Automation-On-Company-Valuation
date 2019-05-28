@@ -8,8 +8,14 @@ def fixed_extend(df, row_label, how):
     if how is "prev":
         df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
     elif how is "avg":
-        mean = df.loc[row_label].iloc[:-2].mean(axis=0)
+        mean = df.loc[row_label].iloc[:-1].mean(axis=0)
         df.at[row_label, df.columns[-1]] = mean
+    elif how is "mix":
+        mean = df.loc[row_label].iloc[:-3].mean(axis=0)
+        if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
+            df.at[row_label, df.columns[-1]] = df.loc[row_label].iloc[:-1].mean(axis=0)
+        else:
+            df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
     else:
         print("error")
 
@@ -28,6 +34,9 @@ def searched_label(labels, target):
             if word in str(label).lower():
                 score_dict[label] += 1
     # FIXME what to return during a break-even point
+    if target == "COGS":
+        print(max(score_dict.items(), key=lambda pair: pair[1]))
+        time.sleep(100)
     return max(score_dict.items(), key=lambda pair: pair[1])[0]
 
 
@@ -119,7 +128,7 @@ def main():
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     years_to_predict = len(growth_rates)
 
-    # Add driver rows to income statement
+    # Add sales growth % driver rows to income statement
     income_statement.loc[np.nan] = np.nan
     income_statement.loc["Drivers %"] = np.nan
     income_statement.loc["Sales Growth %"] = [np.nan] + [
@@ -130,6 +139,18 @@ def main():
             income_statement, searched_label(income_statement.index, "total sales"),
             income_statement.columns[i]
         ) + '-1' for i in range(len(income_statement.columns) - 1)
+    ]
+
+    # Add COGS % driver rows to income statement
+    income_statement.loc[np.nan] = np.nan
+    income_statement.loc["Total COGS %"] = [
+        '=' + excel_cell(
+            income_statement, searched_label(income_statement.index, "total sales"),
+            income_statement.columns[i]
+        ) + '/' + excel_cell(
+            income_statement, searched_label(income_statement.index, "COGS"),
+            income_statement.columns[i]
+        ) for i in range(len(income_statement.columns))
     ]
 
     for i in range(years_to_predict):
