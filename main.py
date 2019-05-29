@@ -132,25 +132,53 @@ def append_yr_column(df):
 
 
 def process_is(is_df, growth_rates, yrs_to_predict):
-    row_labels = is_df.index
     first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
-    sales = searched_label(row_labels, "total sales")
-    sales_growth = searched_label(row_labels, "sales growth %")
-    cogs = searched_label(row_labels, "cost of goods sold")
-    cogs_ratio = searched_label(row_labels, "cogs sales ratio")
-    gross_income = searched_label(row_labels, "gross income")
-    sgna = searched_label(row_labels, "sg&a expense")
-    sgna_ratio = searched_label(row_labels, "sg&a sales ratio")
-    other_expense = searched_label(row_labels, "other expense")
-    ebit = searched_label(row_labels, "ebit")
-    nonoperating_income = searched_label(row_labels, "nonoperating income net")
-    interest_expense = searched_label(row_labels, "interest expense")
-    unusual = searched_label(row_labels, "unusual expense")
-    unusual_ratio = searched_label(row_labels, "unusual ratio")
-    pretax = searched_label(row_labels, "pretax income")
-    income_tax = searched_label(row_labels, "income taxes")
-    effective_tax = searched_label(row_labels, "effective tax rate")
+    sales = searched_label(is_df.index, "total sales")
+    cogs = searched_label(is_df.index, "cost of goods sold")
+    gross_income = searched_label(is_df.index, "gross income")
+    sgna = searched_label(is_df.index, "sg&a expense")
+    other_expense = searched_label(is_df.index, "other expense")
+    ebit = searched_label(is_df.index, "ebit")
+    nonoperating_income = searched_label(is_df.index, "nonoperating income net")
+    interest_expense = searched_label(is_df.index, "interest expense")
+    unusual = searched_label(is_df.index, "unusual expense")
+    income_tax = searched_label(is_df.index, "income taxes")
+
+    # Insert pretax income row before income taxes
+    pretax_df = pd.DataFrame(
+        {
+            col: '={}+{}-{}-{}'.format(
+                excel_cell(is_df, ebit, col), excel_cell(is_df, nonoperating_income, col),
+                excel_cell(is_df, interest_expense, col), excel_cell(is_df, unusual, col)
+            ) for col in is_df.columns
+        }, index=["Pretax Income"]
+    )
+    is_df = insert_before(is_df, pretax_df, "income taxes")
+    pretax = searched_label(is_df.index, "pretax income")
+
+    # Add driver rows to income statement
+    add_empty_row(is_df)
+    is_df.loc["Driver Ratios"] = np.nan
+    is_df.loc["Sales Growth %"] = [np.nan] + [
+        '={}/{}-1'.format(
+            excel_cell(is_df, sales, is_df.columns[i + 1]),
+            excel_cell(is_df, sales, is_df.columns[i])
+        ) for i in range(len(is_df.columns) - 1)
+    ]
+    sales_growth = searched_label(is_df.index, "sales growth %")
+    add_empty_row(is_df)
+    initialize_ratio_row(is_df, cogs, sales, "COGS Sales Ratio")
+    cogs_ratio = searched_label(is_df.index, "cogs sales ratio")
+    add_empty_row(is_df)
+    initialize_ratio_row(is_df, sgna, sales, "SG&A Sales Ratio")
+    sgna_ratio = searched_label(is_df.index, "sg&a sales ratio")
+    add_empty_row(is_df)
+    initialize_ratio_row(is_df, unusual, ebit, "Unusual Expense EBIT Ratio")
+    unusual_ratio = searched_label(is_df.index, "unusual expense ebit ratio")
+    add_empty_row(is_df)
+    initialize_ratio_row(is_df, income_tax, pretax, "Effective Tax Rate")
+    effective_tax = searched_label(is_df.index, "effective tax rate")
 
     for i in range(yrs_to_predict):
         append_yr_column(is_df)
@@ -158,6 +186,7 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     # Append growth rates to driver row
     is_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rates
 
+    print(is_df)
     # Append driver ratios to driver row
     driver_extend(is_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
@@ -170,7 +199,7 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     fixed_extend(is_df, other_expense, 'prev', yrs_to_predict)
 
     # Calculate net income
-    is_df.loc[searched_label(row_labels, "net income")] = [
+    is_df.loc[searched_label(is_df.index, "net income")] = [
         '={}-{}'.format(excel_cell(is_df, pretax, yr), excel_cell(is_df, income_tax, yr))
         for yr in is_df.columns
     ]
@@ -219,48 +248,74 @@ def process_is(is_df, growth_rates, yrs_to_predict):
 
 
 def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
-    is_row_labels = is_df.index
-    bs_row_labels = bs_df.index
-    cf_row_labels = cf_df.index
+    st_receivables = searched_label(bs_df.index, "short term receivable")
+    cash_st_investments = searched_label(bs_df.index, "cash short term investment")
+    inventories = searched_label(bs_df.index, "inventor")
+    other_cur_assets = searched_label(bs_df.index, "other current asset")
+    total_cur_assets = searched_label(bs_df.index, "total current asset")
+    net_property_plant_equipment = searched_label(bs_df.index, "net property plant qquipment")
+    total_investments_n_advances = searched_label(bs_df.index, "total investment advance")
+    intangible_assets = searched_label(bs_df.index, "intangible asset")
+    deferred_tax_assets = searched_label(bs_df.index, "deferred tax asset")
+    other_assets = searched_label(bs_df.index, "other asset")
+    total_assets = searched_label(bs_df.index, "total asset")
+    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "debt st lt cur portion")
+    accounts_payable = searched_label(bs_df.index, "account payable")
+    income_tax_payable = searched_label(bs_df.index, "income tax payable")
+    other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
+    total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
+    lt_debt = searched_label(bs_df.index, "long term debt")
+    provision_for_risks_n_charges = searched_label(bs_df.index, "provision for risk & charge")
+    deferred_tax_liabilities = searched_label(bs_df.index, "deferred tax liabilities")
+    other_liabilities = searched_label(bs_df.index, "other liabilities")
+    total_liabilities = searched_label(bs_df.index, "total liabilities")
+    working_capital = searched_label(bs_df.index, "working capital")
+    other_cur_assets_growth = searched_label(bs_df.index, "other current asset growth %")
+    dpo = searched_label(bs_df.index, "dpo")
+    misc_cur_liabilities_growth = searched_label(bs_df.index, "misc current liabilit growth")
+    sales = searched_label(is_df.index, "total sales")
+    cogs = searched_label(is_df.index, "cost of goods sold")
+    net_income = searched_label(is_df.index, "net income")
+    deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization") 
+    capital_expenditures = searched_label(cf_df.index, "capital expenditure")
+    cash_div_paid = searched_label(cf_df.index, "cash div paid")
+    charge_in_capital_stock = searched_label(cf_df.index, "charge in capital stock")
+    cash_balance = searched_label(cf_df.index, "cash balance")
 
+    # Add driver rows to balance sheet
+    add_empty_row(bs_df)
+    bs_df.loc["Driver Ratios"] = np.nan
+    bs_df.loc["DSO"] = [
+        "={}/'{}'!{}*365".format(
+            excel_cell(bs_df, st_receivables, yr), IS, excel_cell(is_df, sales, yr)
+        ) for yr in bs_df.columns
+    ]
+    dso = searched_label(bs_df.index, "dso")
+
+    bs_df.loc["Other Current Assets Growth %"] = np.nan
+    bs_df.loc["Other Current Assets Growth %"].iloc[1:] = [
+        '={}/{}-1'.format(
+            excel_cell(bs_df, other_cur_assets, bs_df.columns[i]),
+            excel_cell(bs_df, other_cur_assets, bs_df.columns[i + 1])
+        ) for i in range(len(bs_df.columns) - 1)
+    ]
+
+    add_empty_row(bs_df)
+    bs_df.loc["DPO"] = [
+        "={}/'{}'!{}*366".format(
+            excel_cell(bs_df, accounts_payable, yr), IS, excel_cell(is_df, cogs, yr)
+        ) for yr in bs_df.columns
+    ]
+    bs_df.loc["Miscellaneous Current Liabilities Growth %"] = np.nan
+    bs_df.loc["Miscellaneous Current Liabilities Growth %"].iloc[1:] = [
+        '={}/{}-1'.format(
+            excel_cell(bs_df, other_cur_liabilities, bs_df.columns[i]),
+            excel_cell(bs_df, other_cur_liabilities, bs_df.columns[i + 1])
+        ) for i in range(len(bs_df.columns) - 1)
+    ]
+    
     for i in range(yrs_to_predict):
         append_yr_column(bs_df)
-
-    st_receivables = searched_label(bs_row_labels, "short term receivable")
-    cash_st_investments = searched_label(bs_row_labels, "cash short term investment")
-    inventories = searched_label(bs_row_labels, "inventor")
-    other_cur_assets = searched_label(bs_row_labels, "other current asset")
-    total_cur_assets = searched_label(bs_row_labels, "total current asset")
-    net_property_plant_equipment = searched_label(bs_row_labels, "net property plant qquipment")
-    total_investments_n_advances = searched_label(bs_row_labels, "total investment advance")
-    intangible_assets = searched_label(bs_row_labels, "intangible asset")
-    deferred_tax_assets = searched_label(bs_row_labels, "deferred tax asset")
-    other_assets = searched_label(bs_row_labels, "other asset")
-    total_assets = searched_label(bs_row_labels, "total asset")
-    st_debt_n_cur_portion_lt_debt = searched_label(bs_row_labels, "debt st lt cur portion")
-    accounts_payable = searched_label(bs_row_labels, "account payable")
-    income_tax_payable = searched_label(bs_row_labels, "income tax payable")
-    other_cur_liabilities = searched_label(bs_row_labels, "other current liabilities")
-    total_cur_liabilities = searched_label(bs_row_labels, "total current liabilities")
-    lt_debt = searched_label(bs_row_labels, "long term debt")
-    provision_for_risks_n_charges = searched_label(bs_row_labels, "provision for risk & charge")
-    deferred_tax_liabilities = searched_label(bs_row_labels, "deferred tax liabilities")
-    other_liabilities = searched_label(bs_row_labels, "other liabilities")
-    total_liabilities = searched_label(bs_row_labels, "total liabilities")
-    working_capital = searched_label(bs_row_labels, "working capital")
-    dso = searched_label(bs_row_labels, "dso")
-    other_cur_assets_growth = searched_label(bs_row_labels, "other current asset growth %")
-    dpo = searched_label(bs_row_labels, "dpo")
-    misc_cur_liabilities_growth = searched_label(bs_row_labels, "misc current liabilit growth")
-    sales = searched_label(is_row_labels, "total sales")
-    cogs = searched_label(is_row_labels, "cost of goods sold")
-    net_income = searched_label(is_row_labels, "net income")
-    deprec_deplet_n_amort = searched_label(cf_row_labels, "depreciation depletion amortization") 
-    capital_expenditures = searched_label(cf_row_labels, "capital expenditure")
-    cash_div_paid = searched_label(cf_row_labels, "cash div paid")
-    charge_in_capital_stock = searched_label(cf_row_labels, "charge in capital stock")
-    cash_balance = searched_label(cf_row_labels, "cash balance")
-
 
     fixed_extend(bs_df, total_investments_n_advances, 'prev', yrs_to_predict)
     fixed_extend(bs_df, intangible_assets, 'prev', yrs_to_predict)
@@ -292,10 +347,8 @@ def process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict):
 def initialize_ratio_row(df, top_label, bot_label, new_label):
     """Create a new label and set a fractional formula for initialization."""
     df.loc[new_label] = [
-        '={}/{}'.format(
-            excel_cell(df, searched_label(df.index, top_label), col),
-            excel_cell(df, searched_label(df.index, bot_label), col)
-        ) for col in df.columns
+        '={}/{}'.format(excel_cell(df, top_label, col), excel_cell(df, bot_label, col))
+        for col in df.columns
     ]
 
 
@@ -323,56 +376,11 @@ def main():
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
 
-    # Insert pretax income row before income taxes
-    ebit = searched_label(income_statement.index, "ebit")
-    nonoperating_income = searched_label(income_statement.index, "nonoperating income")
-    interest_expense = searched_label(income_statement.index, "interest expense")
-    unusual_expense = searched_label(income_statement.index, "unusual expense")
-    pretax = pd.DataFrame(
-        {
-            col: '={}+{}-{}-{}'.format(
-                excel_cell(income_statement, ebit, col),
-                excel_cell(income_statement, nonoperating_income, col),
-                excel_cell(income_statement, interest_expense, col),
-                excel_cell(income_statement, unusual_expense, col)
-            ) for col in income_statement.columns
-        }, index=["Pretax Income"]
-    )
-    income_statement = insert_before(income_statement, pretax, "income taxes")
-
-    # Add driver rows to income statement
-    add_empty_row(income_statement)
-    income_statement.loc["Driver Ratios"] = np.nan
-    income_statement.loc["Sales Growth %"] = [np.nan] + [
-        '={}/{}-1'.format(
-            excel_cell(
-                income_statement, searched_label(income_statement.index, "total sales"),
-                income_statement.columns[i + 1]
-            ),
-            excel_cell(
-                income_statement, searched_label(income_statement.index, "total sales"),
-                income_statement.columns[i]
-            )
-        ) for i in range(len(income_statement.columns) - 1)
-    ]
-    add_empty_row(income_statement)
-    initialize_ratio_row(income_statement, "cogs", "total sales", "COGS Sales Ratio")
-    add_empty_row(income_statement)
-    initialize_ratio_row(income_statement, "sg&a expense", "total sales", "SG&A Sales Ratio")
-    add_empty_row(income_statement)
-    initialize_ratio_row(income_statement, "unusual expense", "ebit", "Unusual Expense EBIT Ratio")
-    add_empty_row(income_statement)
-    initialize_ratio_row(income_statement, "income taxes", "pretax", "Effective Tax Rate")
-
-    # Add driver rows to balance sheet
-    add_empty_row(balance_sheet)
-    balance_sheet.loc["Driver Ratios"] = np.nan
-    # balance_sheet.loc["DSO"] = ["={}/'{}'!{}*365".format(excel_cell()) for yr in balance_sheet.columns]
-
     income_statement = process_is(income_statement, growth_rates, yrs_to_predict)
     balance_sheet = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
+    print(income_statement)
     print(balance_sheet)
 
     with pd.ExcelWriter("output.xlsx") as writer:
