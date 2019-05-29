@@ -4,13 +4,10 @@ import time
 import numpy as np
 import pandas as pd
 
-# Next things to write:
-#   General eval_formula
-#   Generalize most indices
-
-
 ROUNDING_DIGIT = 4
-
+ICS = "Income Statement"
+BLS = "Balance Sheet"
+CFS = "Cashflow Statement"
 
 def add_empty_row(df):
     """Adds an empty row to the bottom of DataFrame."""
@@ -43,6 +40,8 @@ def fixed_extend(df, row_label, how, yrs):
             df.at[row_label, df.columns[-1]] = df.loc[row_label].iloc[:-1].mean(axis=0)
         else:
             df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
+    elif how is "zero":
+        df.at[row_label, df.columns[-yrs:]] = 6
     else:
         print("ERROR: fixed_extend")
         exit(1)
@@ -93,7 +92,11 @@ def searched_label(labels, target):
     # FIXME what to return during a break-even point
     if sum(score_dict.values()) == 0:
         return ""
-    return max(score_dict.items(), key=lambda pair: pair[1])[0]
+    def compare(pair):
+        if type(pair[0]) is str:
+            return len(pair[0])
+        return 0
+    return max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
 
 
 def preprocess(df):
@@ -128,33 +131,32 @@ def append_yr_column(df):
     df.insert(len(df.columns), cur_yr, array)
 
 
-def append_next_income_statement(income_df, growth_rate, yrs_to_predict):
-    # Uesful short-hands
+def append_next_income_statement(income_df, growth_rates, yrs_to_predict):
     row_labels = income_df.index
     first_yr = income_df.columns[0]
     last_given_yr = income_df.columns[-1]
     sales = searched_label(row_labels, "total sales")
     sales_growth = searched_label(row_labels, "sales growth %")
-    cogs = searched_label(row_labels, "cogs")
+    cogs = searched_label(row_labels, "cost of goods sold")
     cogs_ratio = searched_label(row_labels, "cogs sales ratio")
     gross_income = searched_label(row_labels, "gross income")
     sgna = searched_label(row_labels, "sg&a expense")
     sgna_ratio = searched_label(row_labels, "sg&a sales ratio")
+    other_expense = searched_label(row_labels, "other expense")
     ebit = searched_label(row_labels, "ebit")
+    nonoperating_income = searched_label(row_labels, "nonoperating income net")
+    interest_expense = searched_label(row_labels, "interest expense")
     unusual = searched_label(row_labels, "unusual expense")
     unusual_ratio = searched_label(row_labels, "unusual ratio")
     pretax = searched_label(row_labels, "pretax income")
-    nonoperating_income = searched_label(row_labels, "nonoperating income net")
-    interest_expense = searched_label(row_labels, "interest expense")
-    other_expense = searched_label(row_labels, "other expense")
-    effective_tax = searched_label(row_labels, "effective tax rate")
     income_tax = searched_label(row_labels, "income taxes")
+    effective_tax = searched_label(row_labels, "effective tax rate")
 
     for i in range(yrs_to_predict):
         append_yr_column(income_df)
 
-    # Append growth rate to driver row
-    income_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rate
+    # Append growth rates to driver row
+    income_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rates
 
     # Append driver ratios to driver row
     driver_extend(income_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
@@ -167,71 +169,91 @@ def append_next_income_statement(income_df, growth_rate, yrs_to_predict):
     fixed_extend(income_df, interest_expense, 'prev', yrs_to_predict)
     fixed_extend(income_df, other_expense, 'prev', yrs_to_predict)
 
-    income_df.loc[searched_label(row_labels, "net income")] = ['=' + excel_cell() + '-' + excel_cell() for i in range(len(income_df.columns))]
+    # Calculate net income
+    income_df.loc[searched_label(row_labels, "net income")] = [
+        '={}-{}'.format(excel_cell(income_df, pretax, yr), excel_cell(income_df, income_tax, yr))
+        for yr in income_df.columns
+    ]
 
     for i in range(yrs_to_predict):
         cur_yr = income_df.columns[-yrs_to_predict + i]
         prev_yr = income_df.columns[-yrs_to_predict + i - 1]    
 
-        # Calculate total sale
-        income_df.at[sales, cur_yr] = '=' + excel_cell(income_df, sales, prev_yr) + '*(1+' + \
-                                      excel_cell(income_df, sales_growth, cur_yr) + ')'
-
-        # Calculate COGS
-        income_df.at[cogs, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
-                                     '*' + excel_cell(income_df, cogs_ratio, cur_yr)
-
-        # Calculate gross income
-        income_df.at[gross_income, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
-                                             '-' + excel_cell(income_df, cogs, cur_yr)
-
-        # Calculate SG&A expense
-        income_df.at[sgna, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
-                                     '*' + excel_cell(income_df, sgna_ratio, cur_yr)
-
-        # Calcualte EBIT
-        income_df.at[ebit, cur_yr] = '=' + excel_cell(income_df, gross_income, cur_yr) + '-' + \
-                                     excel_cell(income_df, sgna, cur_yr) + '-' + \
-                                     excel_cell(income_df, other_expense, cur_yr)
-
-        # Calculate unusual expense
-        income_df.at[unusual, cur_yr] = '=' + excel_cell(income_df, ebit, cur_yr) + \
-                                        '*' + excel_cell(income_df, unusual_ratio, cur_yr)
-
-        # Calculate pretax income
-        income_df.at[pretax, cur_yr] = '=' + excel_cell(income_df, ebit, cur_yr) + '+' + \
-                                       excel_cell(income_df, nonoperating_income, cur_yr) + \
-                                       '-' + excel_cell(income_df, interest_expense, cur_yr) + \
-                                       '-' + excel_cell(income_df, unusual, cur_yr)
-
-        # Calculate income taxes
-        income_df.at[income_tax, cur_yr] = '=' + excel_cell(income_df, pretax, cur_yr) + '*' + \
-                                           excel_cell(income_df, effective_tax, cur_yr)
-
+        # Calculate variables
+        income_df.at[sales, cur_yr] = '={}*(1+{})'.format(
+            excel_cell(income_df, sales, prev_yr),
+            excel_cell(income_df, sales_growth, cur_yr)
+        )
+        income_df.at[cogs, cur_yr] = '={}*{}'.format(
+            excel_cell(income_df, sales, cur_yr),
+            excel_cell(income_df, cogs_ratio, cur_yr)
+        )
+        income_df.at[gross_income, cur_yr] = '={}-{}'.format(
+            excel_cell(income_df, sales, cur_yr),
+            excel_cell(income_df, cogs, cur_yr)
+        )
+        income_df.at[sgna, cur_yr] = '={}*{}'.format(
+            excel_cell(income_df, sales, cur_yr),
+            excel_cell(income_df, sgna_ratio, cur_yr)
+        )
+        income_df.at[ebit, cur_yr] = '={}-{}-{}'.format(
+            excel_cell(income_df, gross_income, cur_yr),
+            excel_cell(income_df, sgna, cur_yr),
+            excel_cell(income_df, other_expense, cur_yr)
+        )
+        income_df.at[unusual, cur_yr] = '={}*{}'.format(
+            excel_cell(income_df, ebit, cur_yr),
+            excel_cell(income_df, unusual_ratio, cur_yr)
+        )
+        income_df.at[pretax, cur_yr] = '={}+{}-{}-{}'.format(
+            excel_cell(income_df, ebit, cur_yr),
+            excel_cell(income_df, nonoperating_income, cur_yr),
+            excel_cell(income_df, interest_expense, cur_yr),
+            excel_cell(income_df, unusual, cur_yr)
+        )
+        income_df.at[income_tax, cur_yr] = '={}*{}'.format(
+             excel_cell(income_df, pretax, cur_yr),
+             excel_cell(income_df, effective_tax, cur_yr)
+        )
     return income_df
 
 
-def append_next_balance_sheet(income_statement, balance_sheet, growth_rate):
-    append_yr_column(balance_sheet)
+def append_next_balance_sheet(income_statement, balance_sheet, yrs_to_predict):
+    row_label = balance_sheet.index
+
+    for i in range(yrs_to_predict):
+        append_yr_column(balance_sheet)
     return balance_sheet
 
 
-def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate):
-    append_yr_column(cash_flow)
+def append_next_cash_flow(income_statement, balance_sheet, cash_flow, yrs_to_predict):
+    row_labels = cash_flow.index
+    for i in range(yrs_to_predict):
+        append_yr_column(cash_flow)
+    fixed_extend(cash_flow, searched_label(row_labels, "deferred taxes"), "zero", yrs_to_predict)
+    fixed_extend(cash_flow, searched_label(row_labels, "other funds"), "zero", yrs_to_predict)
+    fixed_extend(cash_flow, searched_label(row_labels, "net asset"), "zero", yrs_to_predict)
+    fixed_extend(cash_flow, searched_label(row_labels, "fixed asset"), "zero", yrs_to_predict)
+    fixed_extend(cash_flow, searched_label(row_labels, "purchase sale investments"),
+                 "zero", yrs_to_predict)
+
     return cash_flow
 
 
 def initialize_ratio_row(df, top_label, bot_label, new_label):
+    """Create a new label and set a fractional formula for initialization."""
     df.loc[new_label] = [
-        '=' + excel_cell(df, searched_label(df.index, top_label), col) + '/' +
-        excel_cell(df, searched_label(df.index, bot_label), col)
-        for col in df.columns
+        '={}/{}'.format(
+            excel_cell(df, searched_label(df.index, top_label), col),
+            excel_cell(df, searched_label(df.index, bot_label), col)
+        ) for col in df.columns
     ]
 
 
-def insert_before(df, data_df, label):
+def insert_before(df, new_df, label):
+    """Insert new DataFrame before the corresponding label row."""
     index = list(df.index).index(searched_label(df.index, label))
-    return pd.concat([df.iloc[:index], data_df, df[index:]])
+    return pd.concat([df.iloc[:index], new_df, df[index:]])
 
 
 def main():
@@ -256,13 +278,16 @@ def main():
     add_empty_row(income_statement)
     income_statement.loc["Driver Ratios"] = np.nan
     income_statement.loc["Sales Growth %"] = [np.nan] + [
-        '=' + excel_cell(
-            income_statement, searched_label(income_statement.index, "total sales"),
-            income_statement.columns[i + 1]
-        ) + '/' + excel_cell(
-            income_statement, searched_label(income_statement.index, "total sales"),
-            income_statement.columns[i]
-        ) + '-1' for i in range(len(income_statement.columns) - 1)
+        '={}/{}-1'.format(
+            excel_cell(
+                income_statement, searched_label(income_statement.index, "total sales"),
+                income_statement.columns[i + 1]
+            ),
+            excel_cell(
+                income_statement, searched_label(income_statement.index, "total sales"),
+                income_statement.columns[i]
+            )
+        ) for i in range(len(income_statement.columns) - 1)
     ]
 
     # Insert pretax income row before income taxes
@@ -272,11 +297,12 @@ def main():
     unusual_expense = searched_label(income_statement.index, "unusual expense")
     pretax = pd.DataFrame(
         {
-            col: '=' + excel_cell(income_statement, ebit, col) + '+' + \
-            excel_cell(income_statement, nonoperating_income, col) + '-' + \
-            excel_cell(income_statement, interest_expense, col) + '-' + \
-            excel_cell(income_statement, unusual_expense, col)
-            for col in income_statement.columns
+            col: '={}+{}-{}-{}'.format(
+                excel_cell(income_statement, ebit, col),
+                excel_cell(income_statement, nonoperating_income, col),
+                excel_cell(income_statement, interest_expense, col),
+                excel_cell(income_statement, unusual_expense, col)
+            ) for col in income_statement.columns
         }, index=["Pretax Income"]
     )
     income_statement = insert_before(income_statement, pretax, "income taxes")
@@ -292,15 +318,15 @@ def main():
     initialize_ratio_row(income_statement, "income taxes", "pretax", "Effective Tax Rate")
 
     income_statement = append_next_income_statement(income_statement, growth_rates, yrs_to_predict)
-    balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rates)
-    cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates)
+    balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, yrs_to_predict)
+    cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
-    print(income_statement)
+    print(balance_sheet)
 
     with pd.ExcelWriter("output.xlsx") as writer:
-        income_statement.to_excel(writer, sheet_name="Income Statement")
-        balance_sheet.to_excel(writer, sheet_name="Balance Sheet")
-        cash_flow.to_excel(writer, sheet_name="Cashflow Statement")
+        income_statement.to_excel(writer, sheet_name=ICS)
+        balance_sheet.to_excel(writer, sheet_name=BLS)
+        cash_flow.to_excel(writer, sheet_name=CFS)
 
 
 if __name__ == "__main__":
