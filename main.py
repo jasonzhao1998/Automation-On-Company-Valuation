@@ -1,17 +1,42 @@
 import os
+import re
 import time
 import numpy as np
 import pandas as pd
 
+# Next things to write:
+#   General eval_formula
+#   Generalize most indices
+
 
 ROUNDING_DIGIT = 4
 
-def fixed_extend(df, row_label, how, years):
-    if how is "prev":
-        df.at[row_label, df.columns[-years:]] = df.loc[row_label, df.columns[-years - 1]]
+
+def add_empty_row(df):
+    """Adds an empty row to the bottom of DataFrame."""
+    df.loc["null"] = np.nan
+    df.index = list(df.index)[:-1] + [np.nan]
+
+
+def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict):
+    formula = ""
+    if how is "round":
+        formula = "=ROUND(" + excel_cell(df, row_label, last_given_yr) + ',' + \
+                  str(ROUNDING_DIGIT) + ')'
     elif how is "avg":
-        mean = df.loc[row_label].iloc[:-years].mean(axis=0)
-        df.at[row_label, df.columns[-years]] = mean
+        formula = "=AVERAGE(" + excel_cell(df, row_label, df.columns[0]) + ':' + \
+                  excel_cell(df, row_label, last_given_yr) + ')'
+    df.loc[row_label].iloc[-yrs_to_predict] = formula
+    temp = excel_cell(df, row_label, df.columns[-yrs_to_predict])
+    df.loc[row_label].iloc[-yrs_to_predict + 1:] = '=' + temp
+
+def fixed_extend(df, row_label, how, yrs):
+    """Predicts the corresponding row of data only using data from current row."""
+    if how is "prev":
+        df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
+    elif how is "avg":
+        mean = df.loc[row_label].iloc[:-yrs].mean(axis=0)
+        df.at[row_label, df.columns[-yrs]] = mean
     elif how is "mix":
         mean = df.loc[row_label].iloc[:-3].mean(axis=0)
         if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
@@ -22,41 +47,33 @@ def fixed_extend(df, row_label, how, years):
         print("ERROR: fixed_extend")
         exit(1)
 
-
 def eval_formula(df, formula):
-    a1 = formula[1]
-    n1 = 0
-    op = ''
-    index = 0
-    for i, char in enumerate(formula[2:]):
-        if char.isdigit():
-            n1 *= 10
-            n1 += int(char)
+    """Evaluates an excel formula of a dataframe.
+    The mathematical operations must decrease in priority from left to right."""
+    ans = 0
+    cells = re.findall(r"[A-Z][0-9]*", formula)
+    ops = ['+'] + re.findall(r"[+|-|*|/|]", formula)
+    
+    for i in range(len(cells)):
+        row = int(cells[i][1:]) - 2
+        col = ord(cells[i][0]) - ord('A') - 1
+        if ops[i] is '+':
+            ans += df.iat[row, col]
+        elif ops[i] is '-':
+            ans -= df.iat[row, col]
+        elif ops[i] is '*':
+            ans *= df.iat[row, col]
+        elif ops[i] is '/':
+            ans /= df.iat[row, col]
         else:
-            op = char
-            index = i
-            break
-    op = formula[index + 2]
-    a2 = formula[index + 3]
-    n1 -= 2
-    n2 = int(formula[index + 4:]) - 2
-    col1 = ord(a1) - ord('A') - 1
-    col2 = ord(a2) - ord('A') - 1
-    if op is '/':
-        return df.iat[n1, col1] / df.iat[n2, col2]
-    elif op is '*':
-        return df.iat[n1, col1] * df.iat[n2, col2]
-    elif op is '+':
-        return df.iat[n1, col1] + df.iat[n2, col2]
-    elif op is '-':
-        return df.iat[n1, col1] - df.iat[n2, col2]
-    else:
-        print("ERROR: Invalid operator symbol")
-        exit(1)
+            print("ERROR: Invalid operator symbol")
+            exit(1)
+    return ans
 
 
 def excel_cell(df, row_label, col_label):
-    # Note that if there are more than 26 columns, this function does not work
+    """Returns corresponding excel cell position given row label and column label. 
+    Note that if there are more than 26 columns, this function does not work properly."""
     if not row_label:
         print("ERROR: excel_cell")
         exit(1)
@@ -66,6 +83,7 @@ def excel_cell(df, row_label, col_label):
 
 
 def searched_label(labels, target):
+    """Returns target label from a list of DataFrame labels."""
     score_dict = {label: 0 for label in labels}
 
     for word in target.split():
@@ -81,9 +99,6 @@ def searched_label(labels, target):
 def preprocess(df):
     # Reverse columns
     df = df.loc[:, ::-1]
-
-    # Drop rows with elements that are all NaN
-    # df = df.dropna(how='all')
 
     # Replace all '-' with 0
     df = df.replace('-', 0)
@@ -102,20 +117,22 @@ def preprocess(df):
     return df
 
 
-def append_year_column(df):
-    cur_year = str(df.columns[len(df.columns) - 1])
-    if cur_year[-1] == 'E':
-        cur_year = str(int(cur_year[:-1]) + 1) + 'E'
+def append_yr_column(df):
+    """Appends one empty column representing year into DataFrame."""
+    cur_yr = str(df.columns[len(df.columns) - 1])
+    if cur_yr[-1] == 'E':
+        cur_yr = str(int(cur_yr[:-1]) + 1) + 'E'
     else:
-        cur_year = str(int(cur_year) + 1) + 'E'
+        cur_yr = str(int(cur_yr) + 1) + 'E'
     array = ['0' if i else np.nan for i in df.iloc[:,-1].notna().values]
-    df.insert(len(df.columns), cur_year, array)
+    df.insert(len(df.columns), cur_yr, array)
 
 
-def append_next_income_statement(income_df, growth_rate, years_to_predict):
+def append_next_income_statement(income_df, growth_rate, yrs_to_predict):
     # Uesful short-hands
     row_labels = income_df.index
-    last_given_year = income_df.columns[-1]
+    first_yr = income_df.columns[0]
+    last_given_yr = income_df.columns[-1]
     sales = searched_label(row_labels, "total sales")
     sales_growth = searched_label(row_labels, "sales growth %")
     cogs = searched_label(row_labels, "cogs")
@@ -126,96 +143,95 @@ def append_next_income_statement(income_df, growth_rate, years_to_predict):
     ebit = searched_label(row_labels, "ebit")
     unusual = searched_label(row_labels, "unusual expense")
     unusual_ratio = searched_label(row_labels, "unusual ratio")
+    pretax = searched_label(row_labels, "pretax income")
+    nonoperating_income = searched_label(row_labels, "nonoperating income net")
+    interest_expense = searched_label(row_labels, "interest expense")
+    other_expense = searched_label(row_labels, "other expense")
+    effective_tax = searched_label(row_labels, "effective tax rate")
+    income_tax = searched_label(row_labels, "income taxes")
 
-    for i in range(years_to_predict):
-        append_year_column(income_df)
+    for i in range(yrs_to_predict):
+        append_yr_column(income_df)
 
     # Append growth rate to driver row
-    income_df.loc[sales_growth].iloc[-years_to_predict:] = growth_rate
+    income_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rate
 
-    # Append rounded COGS ratio to driver row
-    cogs_val = round(eval_formula(income_df, income_df.at[cogs_ratio, last_given_year]),
-                     ROUNDING_DIGIT)
-    income_df.loc[cogs_ratio].iloc[-years_to_predict:] = cogs_val
-
-    # Append rounded SG&A ratio to driver row
-    sgna_val = round(eval_formula(income_df, income_df.at[sgna_ratio, last_given_year]),
-                     ROUNDING_DIGIT)
-    income_df.loc[sgna_ratio].iloc[-years_to_predict:] = sgna_val
-
-    # Append average Unusual Expense ratio to driver row
-    unusual_val = np.mean(
-        [eval_formula(income_df, income_df.at[unusual_ratio, yr])
-        for yr in income_df.columns[:-years_to_predict]]
-    )
-    income_df.loc[unusual_ratio].iloc[-years_to_predict:] = round(unusual_val,
-                                                                  ROUNDING_DIGIT)
+    # Append driver ratios to driver row
+    driver_extend(income_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
+    driver_extend(income_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
+    driver_extend(income_df, unusual_ratio, "avg", last_given_yr, yrs_to_predict)
+    driver_extend(income_df, effective_tax, "avg", last_given_yr, yrs_to_predict)
 
     # Calculate fixed variables
-    fixed_extend(income_df, searched_label(row_labels, "nonoperating income net"), 'prev',
-                 years_to_predict)
-    fixed_extend(income_df, searched_label(row_labels, "interest expense"), 'prev',
-                 years_to_predict)
-    fixed_extend(income_df, searched_label(row_labels, "other expense"), 'prev', years_to_predict)
+    fixed_extend(income_df, nonoperating_income, 'prev', yrs_to_predict)
+    fixed_extend(income_df, interest_expense, 'prev', yrs_to_predict)
+    fixed_extend(income_df, other_expense, 'prev', yrs_to_predict)
 
-    for i in range(years_to_predict):
-        cur_year = income_df.columns[-years_to_predict + i]
-        prev_year = income_df.columns[-years_to_predict + i - 1]    
+    income_df.loc[searched_label(row_labels, "net income")] = ['=' + excel_cell() + '-' + excel_cell() for i in range(len(income_df.columns))]
+
+    for i in range(yrs_to_predict):
+        cur_yr = income_df.columns[-yrs_to_predict + i]
+        prev_yr = income_df.columns[-yrs_to_predict + i - 1]    
 
         # Calculate total sale
-        income_df.at[sales, cur_year] = '=' + excel_cell(income_df, sales, prev_year) + \
-                                              '*(1+' + \
-                                              excel_cell(income_df, sales_growth, cur_year) + \
-                                              ')'
+        income_df.at[sales, cur_yr] = '=' + excel_cell(income_df, sales, prev_yr) + '*(1+' + \
+                                      excel_cell(income_df, sales_growth, cur_yr) + ')'
 
         # Calculate COGS
-        income_df.at[cogs, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
-                                             '*' + excel_cell(income_df, cogs_ratio, cur_year)
+        income_df.at[cogs, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
+                                     '*' + excel_cell(income_df, cogs_ratio, cur_yr)
 
         # Calculate gross income
-        income_df.at[gross_income, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
-                                                     '-' + excel_cell(income_df, cogs, cur_year)
+        income_df.at[gross_income, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
+                                             '-' + excel_cell(income_df, cogs, cur_yr)
 
         # Calculate SG&A expense
-        income_df.at[sgna, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
-                                             '*' + excel_cell(income_df, sgna_ratio, cur_year)
+        income_df.at[sgna, cur_yr] = '=' + excel_cell(income_df, sales, cur_yr) + \
+                                     '*' + excel_cell(income_df, sgna_ratio, cur_yr)
 
         # Calcualte EBIT
-        income_df.at[ebit, cur_year] = '=' + excel_cell(income_df, gross_income, cur_year) + \
-                                             '-' + excel_cell(income_df, sgna, cur_year) + \
-                                             '-' + excel_cell(
-                                                income_df,
-                                                searched_label(row_labels, "other expense"),
-                                                cur_year
-                                            )
+        income_df.at[ebit, cur_yr] = '=' + excel_cell(income_df, gross_income, cur_yr) + '-' + \
+                                     excel_cell(income_df, sgna, cur_yr) + '-' + \
+                                     excel_cell(income_df, other_expense, cur_yr)
 
         # Calculate unusual expense
-        income_df.at[unusual, cur_year] = '=' + excel_cell(income_df, ebit, cur_year) + \
-                                                '*' + excel_cell(income_df, unusual_ratio, cur_year)
+        income_df.at[unusual, cur_yr] = '=' + excel_cell(income_df, ebit, cur_yr) + \
+                                        '*' + excel_cell(income_df, unusual_ratio, cur_yr)
+
+        # Calculate pretax income
+        income_df.at[pretax, cur_yr] = '=' + excel_cell(income_df, ebit, cur_yr) + '+' + \
+                                       excel_cell(income_df, nonoperating_income, cur_yr) + \
+                                       '-' + excel_cell(income_df, interest_expense, cur_yr) + \
+                                       '-' + excel_cell(income_df, unusual, cur_yr)
+
+        # Calculate income taxes
+        income_df.at[income_tax, cur_yr] = '=' + excel_cell(income_df, pretax, cur_yr) + '*' + \
+                                           excel_cell(income_df, effective_tax, cur_yr)
+
     return income_df
 
 
 def append_next_balance_sheet(income_statement, balance_sheet, growth_rate):
-    append_year_column(balance_sheet)
+    append_yr_column(balance_sheet)
     return balance_sheet
 
 
 def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate):
-    append_year_column(cash_flow)
+    append_yr_column(cash_flow)
     return cash_flow
 
 
 def initialize_ratio_row(df, top_label, bot_label, new_label):
     df.loc[new_label] = [
-        '=' + excel_cell(df, searched_label(df.index, top_label), df.columns[i]) + '/' +
-        excel_cell(df, searched_label(df.index, bot_label), df.columns[i])
-        for i in range(len(df.columns))
+        '=' + excel_cell(df, searched_label(df.index, top_label), col) + '/' +
+        excel_cell(df, searched_label(df.index, bot_label), col)
+        for col in df.columns
     ]
 
 
 def insert_before(df, data_df, label):
     index = list(df.index).index(searched_label(df.index, label))
-    df = pd.concat([df.iloc[:index], data_df, df[index:]])
+    return pd.concat([df.iloc[:index], data_df, df[index:]])
 
 
 def main():
@@ -234,11 +250,10 @@ def main():
 
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
-    years_to_predict = len(growth_rates)
+    yrs_to_predict = len(growth_rates)
 
     # Add sales growth % driver rows to income statement
-    income_statement.loc["null"] = np.nan
-    income_statement.index = list(income_statement.index)[:-1] + [np.nan]
+    add_empty_row(income_statement)
     income_statement.loc["Driver Ratios"] = np.nan
     income_statement.loc["Sales Growth %"] = [np.nan] + [
         '=' + excel_cell(
@@ -250,26 +265,33 @@ def main():
         ) + '-1' for i in range(len(income_statement.columns) - 1)
     ]
 
-    # Add COGS % driver rows to income statement
-    income_statement.loc["null"] = np.nan
-    income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    initialize_ratio_row(income_statement, "cogs", "total sales", "COGS Sales Ratio")
-
-    # Add SG&A % driver row to income statement
-    income_statement.loc["null"] = np.nan
-    income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    initialize_ratio_row(income_statement, "sg&a expense", "total sales", "SG&A Sales Ratio")
-
-    # Add SG&A % driver row to income statement
-    income_statement.loc["null"] = np.nan
-    income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    initialize_ratio_row(income_statement, "unusual expense", "ebit", "Unusual Expense EBIT Ratio")
-
     # Insert pretax income row before income taxes
-    
+    ebit = searched_label(income_statement.index, "ebit")
+    nonoperating_income = searched_label(income_statement.index, "nonoperating income")
+    interest_expense = searched_label(income_statement.index, "interest expense")
+    unusual_expense = searched_label(income_statement.index, "unusual expense")
+    pretax = pd.DataFrame(
+        {
+            col: '=' + excel_cell(income_statement, ebit, col) + '+' + \
+            excel_cell(income_statement, nonoperating_income, col) + '-' + \
+            excel_cell(income_statement, interest_expense, col) + '-' + \
+            excel_cell(income_statement, unusual_expense, col)
+            for col in income_statement.columns
+        }, index=["Pretax Income"]
+    )
+    income_statement = insert_before(income_statement, pretax, "income taxes")
 
-    income_statement = append_next_income_statement(income_statement, growth_rates,
-                                                    years_to_predict)
+    # Add driver rows to income statement
+    add_empty_row(income_statement)
+    initialize_ratio_row(income_statement, "cogs", "total sales", "COGS Sales Ratio")
+    add_empty_row(income_statement)
+    initialize_ratio_row(income_statement, "sg&a expense", "total sales", "SG&A Sales Ratio")
+    add_empty_row(income_statement)
+    initialize_ratio_row(income_statement, "unusual expense", "ebit", "Unusual Expense EBIT Ratio")
+    add_empty_row(income_statement)
+    initialize_ratio_row(income_statement, "income taxes", "pretax", "Effective Tax Rate")
+
+    income_statement = append_next_income_statement(income_statement, growth_rates, yrs_to_predict)
     balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rates)
     cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates)
 
