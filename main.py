@@ -4,14 +4,14 @@ import numpy as np
 import pandas as pd
 
 
-def initialize_ratio_row(df, top_label, bot_label, )
+ROUNDING_DIGIT = 4
 
-def fixed_extend(df, row_label, how):
+def fixed_extend(df, row_label, how, years):
     if how is "prev":
-        df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
+        df.at[row_label, df.columns[-years:]] = df.loc[row_label, df.columns[-years - 1]]
     elif how is "avg":
-        mean = df.loc[row_label].iloc[:-1].mean(axis=0)
-        df.at[row_label, df.columns[-1]] = mean
+        mean = df.loc[row_label].iloc[:-years].mean(axis=0)
+        df.at[row_label, df.columns[-years]] = mean
     elif how is "mix":
         mean = df.loc[row_label].iloc[:-3].mean(axis=0)
         if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
@@ -112,73 +112,88 @@ def append_year_column(df):
     df.insert(len(df.columns), cur_year, array)
 
 
-def append_next_income_statement(income_df, growth_rate):
-    append_year_column(income_df)
-
+def append_next_income_statement(income_df, growth_rate, years_to_predict):
     # Uesful short-hands
     row_labels = income_df.index
-    cur_year = income_df.columns[-1]
-    prev_year = income_df.columns[-2]
-    sales_label = searched_label(row_labels, "total sales")
-    sales_growth_label = searched_label(row_labels, "sales growth %")
-    cogs_label = searched_label(row_labels, "cogs")
-    cogs_ratio_label = searched_label(row_labels, "cogs sales ratio")
-    gross_income_label = searched_label(row_labels, "gross income")
-    sgna_label = searched_label(row_labels, "sg&a expense")
-    sgna_ratio_label = searched_label(row_labels, "sg&a sales ratio")
-    ebit_label = searched_label(row_labels, "ebit")
+    last_given_year = income_df.columns[-1]
+    sales = searched_label(row_labels, "total sales")
+    sales_growth = searched_label(row_labels, "sales growth %")
+    cogs = searched_label(row_labels, "cogs")
+    cogs_ratio = searched_label(row_labels, "cogs sales ratio")
+    gross_income = searched_label(row_labels, "gross income")
+    sgna = searched_label(row_labels, "sg&a expense")
+    sgna_ratio = searched_label(row_labels, "sg&a sales ratio")
+    ebit = searched_label(row_labels, "ebit")
+    unusual = searched_label(row_labels, "unusual expense")
+    unusual_ratio = searched_label(row_labels, "unusual ratio")
+
+    for i in range(years_to_predict):
+        append_year_column(income_df)
 
     # Append growth rate to driver row
-    income_df.at[sales_growth_label, cur_year] = growth_rate
+    income_df.loc[sales_growth].iloc[-years_to_predict:] = growth_rate
 
     # Append rounded COGS ratio to driver row
-    cogs_ratio = 0
-    if type(income_df.at[cogs_ratio_label, prev_year]) is str:
-        cogs_ratio = round(eval_formula(income_df, income_df.at[cogs_ratio_label, prev_year]), 4)
-    else:
-        cogs_ratio = income_df.at[cogs_ratio_label, prev_year]
-    income_df.at[cogs_ratio_label, cur_year] = cogs_ratio
+    cogs_val = round(eval_formula(income_df, income_df.at[cogs_ratio, last_given_year]),
+                     ROUNDING_DIGIT)
+    income_df.loc[cogs_ratio].iloc[-years_to_predict:] = cogs_val
 
     # Append rounded SG&A ratio to driver row
-    sgna_ratio = 0
-    if type(income_df.at[sgna_ratio_label, prev_year]) is str:
-        sgna_ratio = round(eval_formula(income_df, income_df.at[sgna_ratio_label, prev_year]), 4)
-    else:
-        sgna_ratio = income_df.at[sgna_ratio_label, prev_year]
-    income_df.at[sgna_ratio_label, cur_year] = sgna_ratio
+    sgna_val = round(eval_formula(income_df, income_df.at[sgna_ratio, last_given_year]),
+                     ROUNDING_DIGIT)
+    income_df.loc[sgna_ratio].iloc[-years_to_predict:] = sgna_val
+
+    # Append average Unusual Expense ratio to driver row
+    unusual_val = np.mean(
+        [eval_formula(income_df, income_df.at[unusual_ratio, yr])
+        for yr in income_df.columns[:-years_to_predict]]
+    )
+    income_df.loc[unusual_ratio].iloc[-years_to_predict:] = round(unusual_val,
+                                                                  ROUNDING_DIGIT)
 
     # Calculate fixed variables
-    fixed_extend(income_df, searched_label(row_labels, "nonoperating income net"), 'prev')
-    fixed_extend(income_df, searched_label(row_labels, "interest expense"), 'prev')
-    fixed_extend(income_df, searched_label(row_labels, "other expense"), 'prev')
+    fixed_extend(income_df, searched_label(row_labels, "nonoperating income net"), 'prev',
+                 years_to_predict)
+    fixed_extend(income_df, searched_label(row_labels, "interest expense"), 'prev',
+                 years_to_predict)
+    fixed_extend(income_df, searched_label(row_labels, "other expense"), 'prev', years_to_predict)
 
-    # Calculate total sale
-    income_df.at[sales_label, cur_year] = '=' + excel_cell(income_df, sales_label, prev_year) + \
-                                          '*(1+' + \
-                                          excel_cell(income_df, sales_growth_label, cur_year) + ')'
+    for i in range(years_to_predict):
+        cur_year = income_df.columns[-years_to_predict + i]
+        prev_year = income_df.columns[-years_to_predict + i - 1]    
 
-    # Calculate COGS
-    income_df.at[cogs_label, cur_year] = '=' + excel_cell(income_df, sales_label, cur_year) + \
-                                         '*' + excel_cell(income_df, cogs_ratio_label, cur_year)
+        # Calculate total sale
+        income_df.at[sales, cur_year] = '=' + excel_cell(income_df, sales, prev_year) + \
+                                              '*(1+' + \
+                                              excel_cell(income_df, sales_growth, cur_year) + \
+                                              ')'
 
-    # Calculate gross income
-    income_df.at[gross_income_label, cur_year] = '=' + excel_cell(income_df, sales_label, cur_year) + \
-                                                 '-' + excel_cell(income_df, cogs_label, cur_year)
+        # Calculate COGS
+        income_df.at[cogs, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
+                                             '*' + excel_cell(income_df, cogs_ratio, cur_year)
 
-    # Calculate SG&A Expense
-    income_df.at[sgna_label, cur_year] = '=' + excel_cell(income_df, sales_label, cur_year) + \
-                                         '*' + excel_cell(income_df, sgna_ratio_label, cur_year)
+        # Calculate gross income
+        income_df.at[gross_income, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
+                                                     '-' + excel_cell(income_df, cogs, cur_year)
 
-    # Calcualte EBIT
-    income_df.at[ebit_label, cur_year] = '=' + excel_cell(income_df, gross_income_label, cur_year) + \
-                                         '-' + excel_cell(income_df, sgna_label, cur_year) + \
-                                         '-' + excel_cell(
-                                            income_df, searched_label(row_labels, "other expense"),
-                                            cur_year
-                                        )
+        # Calculate SG&A expense
+        income_df.at[sgna, cur_year] = '=' + excel_cell(income_df, sales, cur_year) + \
+                                             '*' + excel_cell(income_df, sgna_ratio, cur_year)
 
+        # Calcualte EBIT
+        income_df.at[ebit, cur_year] = '=' + excel_cell(income_df, gross_income, cur_year) + \
+                                             '-' + excel_cell(income_df, sgna, cur_year) + \
+                                             '-' + excel_cell(
+                                                income_df,
+                                                searched_label(row_labels, "other expense"),
+                                                cur_year
+                                            )
+
+        # Calculate unusual expense
+        income_df.at[unusual, cur_year] = '=' + excel_cell(income_df, ebit, cur_year) + \
+                                                '*' + excel_cell(income_df, unusual_ratio, cur_year)
     return income_df
- 
+
 
 def append_next_balance_sheet(income_statement, balance_sheet, growth_rate):
     append_year_column(balance_sheet)
@@ -188,6 +203,19 @@ def append_next_balance_sheet(income_statement, balance_sheet, growth_rate):
 def append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate):
     append_year_column(cash_flow)
     return cash_flow
+
+
+def initialize_ratio_row(df, top_label, bot_label, new_label):
+    df.loc[new_label] = [
+        '=' + excel_cell(df, searched_label(df.index, top_label), df.columns[i]) + '/' +
+        excel_cell(df, searched_label(df.index, bot_label), df.columns[i])
+        for i in range(len(df.columns))
+    ]
+
+
+def insert_before(df, data_df, label):
+    index = list(df.index).index(searched_label(df.index, label))
+    df = pd.concat([df.iloc[:index], data_df, df[index:]])
 
 
 def main():
@@ -225,47 +253,25 @@ def main():
     # Add COGS % driver rows to income statement
     income_statement.loc["null"] = np.nan
     income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    income_statement.loc["COGS Sales Ratio"] = [
-        '=' + excel_cell(
-            income_statement, searched_label(income_statement.index, "cogs"),
-            income_statement.columns[i]
-        ) + '/' + excel_cell(
-            income_statement, searched_label(income_statement.index, "total sales"),
-            income_statement.columns[i]
-        ) for i in range(len(income_statement.columns))
-    ]
+    initialize_ratio_row(income_statement, "cogs", "total sales", "COGS Sales Ratio")
 
     # Add SG&A % driver row to income statement
     income_statement.loc["null"] = np.nan
     income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    income_statement.loc["SG&A Sales Ratio"] = [
-        '=' + excel_cell(
-            income_statement, searched_label(income_statement.index, "sg&a expense"),
-            income_statement.columns[i]
-        ) + '/' + excel_cell(
-            income_statement, searched_label(income_statement.index, "total sales"),
-            income_statement.columns[i]
-        ) for i in range(len(income_statement.columns))
-    ]
+    initialize_ratio_row(income_statement, "sg&a expense", "total sales", "SG&A Sales Ratio")
 
-    # Add COGS % driver rows to income statement
+    # Add SG&A % driver row to income statement
     income_statement.loc["null"] = np.nan
     income_statement.index = list(income_statement.index)[:-1] + [np.nan]
-    income_statement.loc["COGS Sales Ratio"] = [
-        '=' + excel_cell(
-            income_statement, searched_label(income_statement.index, "cogs"),
-            income_statement.columns[i]
-        ) + '/' + excel_cell(
-            income_statement, searched_label(income_statement.index, "total sales"),
-            income_statement.columns[i]
-        ) for i in range(len(income_statement.columns))
-    ]
+    initialize_ratio_row(income_statement, "unusual expense", "ebit", "Unusual Expense EBIT Ratio")
 
-    for i in range(years_to_predict):
-        growth_rate = growth_rates[i]
-        income_statement = append_next_income_statement(income_statement, growth_rate)
-        balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rate)
-        cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rate)
+    # Insert pretax income row before income taxes
+    
+
+    income_statement = append_next_income_statement(income_statement, growth_rates,
+                                                    years_to_predict)
+    balance_sheet = append_next_balance_sheet(income_statement, balance_sheet, growth_rates)
+    cash_flow = append_next_cash_flow(income_statement, balance_sheet, cash_flow, growth_rates)
 
     print(income_statement)
 
