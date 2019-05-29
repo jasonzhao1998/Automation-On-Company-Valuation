@@ -186,8 +186,7 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     # Append growth rates to driver row
     is_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rates
 
-    print(is_df)
-    # Append driver ratios to driver row
+    # Calculate driver ratios
     driver_extend(is_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, unusual_ratio, "avg", last_given_yr, yrs_to_predict)
@@ -248,6 +247,8 @@ def process_is(is_df, growth_rates, yrs_to_predict):
 
 
 def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
+    first_yr = bs_df.columns[0]
+    last_given_yr = bs_df.columns[-1]
     st_receivables = searched_label(bs_df.index, "short term receivable")
     cash_st_investments = searched_label(bs_df.index, "cash short term investment")
     inventories = searched_label(bs_df.index, "inventor")
@@ -270,9 +271,6 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     other_liabilities = searched_label(bs_df.index, "other liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
     working_capital = searched_label(bs_df.index, "working capital")
-    other_cur_assets_growth = searched_label(bs_df.index, "other current asset growth %")
-    dpo = searched_label(bs_df.index, "dpo")
-    misc_cur_liabilities_growth = searched_label(bs_df.index, "misc current liabilit growth")
     sales = searched_label(is_df.index, "total sales")
     cogs = searched_label(is_df.index, "cost of goods sold")
     net_income = searched_label(is_df.index, "net income")
@@ -299,6 +297,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(bs_df, other_cur_assets, bs_df.columns[i + 1])
         ) for i in range(len(bs_df.columns) - 1)
     ]
+    other_cur_assets_growth = searched_label(bs_df.index, "other current asset growth %")
 
     add_empty_row(bs_df)
     bs_df.loc["DPO"] = [
@@ -306,6 +305,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(bs_df, accounts_payable, yr), IS, excel_cell(is_df, cogs, yr)
         ) for yr in bs_df.columns
     ]
+    dpo = searched_label(bs_df.index, "dpo")
     bs_df.loc["Miscellaneous Current Liabilities Growth %"] = np.nan
     bs_df.loc["Miscellaneous Current Liabilities Growth %"].iloc[1:] = [
         '={}/{}-1'.format(
@@ -313,10 +313,18 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(bs_df, other_cur_liabilities, bs_df.columns[i + 1])
         ) for i in range(len(bs_df.columns) - 1)
     ]
+    misc_cur_liabilities_growth = searched_label(bs_df.index, "misc current liabilit growth")
     
     for i in range(yrs_to_predict):
         append_yr_column(bs_df)
 
+    # Calculate driver ratios
+    bs_df.loc[dso][last_given_yr:] = '=' + excel_cell(bs_df, dso, bs_df.columns[-yrs_to_predict - 2])
+    driver_extend(bs_df, dpo, "avg", last_given_yr, yrs_to_predict)
+    driver_extend(bs_df, other_cur_assets_growth, "avg", last_given_yr, yrs_to_predict)
+    driver_extend(bs_df, misc_cur_liabilities_growth, "avg", last_given_yr, yrs_to_predict)
+
+    # Calculate fixed variables
     fixed_extend(bs_df, total_investments_n_advances, 'prev', yrs_to_predict)
     fixed_extend(bs_df, intangible_assets, 'prev', yrs_to_predict)
     fixed_extend(bs_df, deferred_tax_assets, 'prev', yrs_to_predict)
