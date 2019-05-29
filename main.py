@@ -180,6 +180,7 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     initialize_ratio_row(is_df, income_tax, pretax, "Effective Tax Rate")
     effective_tax = searched_label(is_df.index, "effective tax rate")
 
+    # Add prediction years
     for i in range(yrs_to_predict):
         append_yr_column(is_df)
 
@@ -270,7 +271,6 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     deferred_tax_liabilities = searched_label(bs_df.index, "deferred tax liabilities")
     other_liabilities = searched_label(bs_df.index, "other liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
-    working_capital = searched_label(bs_df.index, "working capital")
     sales = searched_label(is_df.index, "total sales")
     cogs = searched_label(is_df.index, "cost of goods sold")
     net_income = searched_label(is_df.index, "net income")
@@ -279,6 +279,15 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     cash_div_paid = searched_label(cf_df.index, "cash div paid")
     charge_in_capital_stock = searched_label(cf_df.index, "charge in capital stock")
     cash_balance = searched_label(cf_df.index, "cash balance")
+
+    # Add working capital row
+    add_empty_row(bs_df)
+    bs_df.loc["Working Capital"] = [
+        '={}-{}'.format(
+            excel_cell(bs_df, total_cur_assets, yr),
+            excel_cell(bs_df, total_cur_liabilities, yr)
+        ) for yr in bs_df.columns
+    ]
 
     # Add driver rows to balance sheet
     add_empty_row(bs_df)
@@ -315,6 +324,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     ]
     misc_cur_liabilities_growth = searched_label(bs_df.index, "misc current liabilit growth")
     
+    # Add prediction years
     for i in range(yrs_to_predict):
         append_yr_column(bs_df)
 
@@ -335,6 +345,10 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     fixed_extend(bs_df, provision_for_risks_n_charges, 'prev', yrs_to_predict)
     fixed_extend(bs_df, deferred_tax_liabilities, 'prev', yrs_to_predict)
     fixed_extend(bs_df, other_liabilities, 'prev', yrs_to_predict)
+
+    for i in range(yrs_to_predict):
+        pass
+        
     return bs_df
 
 
