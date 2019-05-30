@@ -289,13 +289,14 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     # Add driver rows to balance sheet
     add_empty_row(bs_df)
     bs_df.loc["Driver Ratios"] = np.nan
+    # DSO
     bs_df.loc["DSO"] = [
         "={}/'{}'!{}*365".format(
             excel_cell(bs_df, st_receivables, yr), IS, excel_cell(is_df, sales, yr)
         ) for yr in bs_df.columns
     ]
     dso = searched_label(bs_df.index, "dso")
-
+    # Other current assets growth %
     bs_df.loc["Other Current Assets Growth %"] = np.nan
     bs_df.loc["Other Current Assets Growth %"].iloc[1:] = [
         '={}/{}-1'.format(
@@ -304,7 +305,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
         ) for i in range(len(bs_df.columns) - 1)
     ]
     other_cur_assets_growth = searched_label(bs_df.index, "other current asset growth %")
-
+    # DPO
     add_empty_row(bs_df)
     bs_df.loc["DPO"] = [
         "={}/'{}'!{}*366".format(
@@ -312,6 +313,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
         ) for yr in bs_df.columns
     ]
     dpo = searched_label(bs_df.index, "dpo")
+    # Miscellaneous Current Liabilities Growth %
     bs_df.loc["Miscellaneous Current Liabilities Growth %"] = np.nan
     bs_df.loc["Miscellaneous Current Liabilities Growth %"].iloc[1:] = [
         '={}/{}-1'.format(
@@ -320,7 +322,17 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
         ) for i in range(len(bs_df.columns) - 1)
     ]
     misc_cur_liabilities_growth = searched_label(bs_df.index, "misc current liabilit growth")
-    
+
+    # Add driver rows to cash flow statement
+    add_empty_row(bs_df)
+    bs_df.loc["Driver Ratios"] = np.nan
+    # Capital Expenditure Revenue Ratio
+    cf_df.loc["Capital Expenditure Revenue Ratio"]  = [
+        "=-{}/'{}'!{}".format(
+            excel_cell(cf_df, capital_expenditures, yr), IS, excel_cell(is_df, sales, yr)
+        ) for yr in cf_df.columns
+    ]
+
     # Add prediction years
     for i in range(yrs_to_predict):
         append_yr_column(bs_df)
@@ -419,6 +431,11 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
 
 
 def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
+    # Short-hands
+    first_yr = cf_df.columns[0]
+    last_given_yr = cf_df.columns[-1]
+
+    # Cash flow statement labels
     net_income_cf = searched_label(cf_df.index, "net income")
     deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization")
     deferred_taxes = searched_label(cf_df.index, "deferred taxes")
@@ -437,15 +454,25 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     net_financing_cf = searched_label(cf_df.index, "net financ cash flow cf")
     cash_balance = searched_label(cf_df.index, "cash balance")
 
+    # Income statement labels
+    sales = searched_label(is_df.index, "total sales")
+    deprec_amort_expense = searched_label(is_df.index, "depreciation amortization expense")
+    net_income_is = searched_label(is_df.index, "net income")
+    diluted_share_outstanding = searched_label(is_df.index, "diluted share outstanding")
+    div_per_share = searched_label(is_df.index, "dividend per share")
+
+    # Balance sheet labels
+    st_receivables = searched_label(bs_df.index, "short term receivable")
+    other_cur_assets = searched_label(bs_df.index, "other current asset")
+    accounts_payable = searched_label(bs_df.index, "accounts payable")
+    other_cur_liabilities = searched_label(bs_df.index, "other current liabilit")
+    lt_debt = searched_label(bs_df.index, "long term debt")
 
     fixed_extend(cf_df, deferred_taxes, "zero", yrs_to_predict)
     fixed_extend(cf_df, other_funds, "zero", yrs_to_predict)
     fixed_extend(cf_df, net_asset_acquisition, "zero", yrs_to_predict)
     fixed_extend(cf_df, fixed_assets_n_businesses_sale, "zero", yrs_to_predict)
     fixed_extend(cf_df, purchase_sale_of_investments, "zero", yrs_to_predict)
-
-    # Add driver rows to cash flow statement
-
 
     return cf_df
 
