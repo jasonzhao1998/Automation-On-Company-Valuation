@@ -9,6 +9,10 @@ IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
 
+"""
+FIXME BUGS:
+    Empty row with same label disturbes excel_cell.
+"""
 
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
     """Create a new label and set a fractional formula for initialization."""
@@ -49,13 +53,13 @@ def add_growth_rate_row(df, label, new_label):
     ]
 
 
-def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict):
+def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_excluded=0):
     formula = ""
     if how is "round":
         formula = "=ROUND(" + excel_cell(df, row_label, last_given_yr) + ',' + \
                   str(ROUNDING_DIGIT) + ')'
     elif how is "avg":
-        formula = "=AVERAGE(" + excel_cell(df, row_label, df.columns[0]) + ':' + \
+        formula = "=AVERAGE(" + excel_cell(df, row_label, df.columns[0 + num_excluded]) + ':' + \
                   excel_cell(df, row_label, last_given_yr) + ')'
     df.loc[row_label].iloc[-yrs_to_predict] = formula
     temp = excel_cell(df, row_label, df.columns[-yrs_to_predict])
@@ -163,7 +167,7 @@ def preprocess(df):
     return df
 
 
-def process_is(is_df, growth_rates, yrs_to_predict):
+def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     # Short-hands
     first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
@@ -171,14 +175,22 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     # Income statement labels
     sales = searched_label(is_df.index, "total sales")
     cogs = searched_label(is_df.index, "cost of goods sold")
+    is_df.index = [
+        i if i != cogs else "Cost of Goods Sold (COGS) excl. D&A" for i in list(is_df.index)
+    ]
+    cogs = "Cost of Goods Sold (COGS) excl. D&A"
     gross_income = searched_label(is_df.index, "gross income")
     sgna = searched_label(is_df.index, "sg&a expense")
     other_expense = searched_label(is_df.index, "other expense")
-    ebit = searched_label(is_df.index, "ebit")
+    ebit = searched_label(is_df.index, "ebit operating income")
     nonoperating_income = searched_label(is_df.index, "nonoperating income net")
     interest_expense = searched_label(is_df.index, "interest expense")
     unusual = searched_label(is_df.index, "unusual expense")
     income_tax = searched_label(is_df.index, "income taxes")
+    diluted_eps = searched_label(is_df.index, "dilute eps")
+    net_income = searched_label(is_df.index, "net income")
+    div_per_share = searched_label(is_df.index, "div per share")
+    ebitda = searched_label(is_df.index, "ebitda")
 
     # Insert pretax income row before income taxes
     pretax_df = pd.DataFrame(
@@ -195,13 +207,30 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     # Insert depreciation & amortization expense before SG&A expense
     dna_expense_df = pd.DataFrame(
         {
-            yr: '=' + excel_cell(
-                cf_df, searched_label(cf_df.index, "deprecia & amortiza expense")
+            yr: "='{}'!".format(CF) + excel_cell(
+                cf_df, searched_label(cf_df.index, "deprecia & amortiza expense"), yr
             ) for yr in is_df.columns
         }, index=["Depreciation & Amortization Expense"]
     )
     is_df = insert_before(is_df, dna_expense_df, "sg&a expense")
     dna_expense = "Depreciation & Amortization Expense"
+
+    # Insert diluted shares outstanding before dividends per share
+    diluted_share_outstanding_df = pd.DataFrame(
+        {
+            yr: "={}/{}".format(
+                excel_cell(is_df, net_income, yr), excel_cell(is_df, diluted_eps, yr)
+            ) for yr in is_df.columns
+        }, index=["Diluted Shares Outstanding"]
+    )
+    is_df = insert_before(is_df, diluted_share_outstanding_df, "div per share")
+    diluted_share_outstanding = "Diluted Shares Outstanding"
+
+    # Recalculate COGS
+    is_df.loc[cogs] = [
+        '={}-{}'.format(is_df.at[cogs, yr], excel_cell(is_df, dna_expense, yr))
+        for yr in is_df.columns
+    ]
 
     # Add driver rows to income statement
     add_empty_row(is_df)
@@ -215,6 +244,8 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     initialize_ratio_row(is_df, sgna, sales, "SG&A Sales Ratio")
     sgna_ratio = "SG&A Sales Ratio"
     add_empty_row(is_df)
+    initialize_ratio_row(is_df, dna_expense, sales, "D&A Sales Ratio")
+    dna_ratio = "D&A Sales Ratio"
     add_empty_row(is_df)
     initialize_ratio_row(is_df, unusual, ebit, "Unusual Expense EBIT Ratio")
     unusual_ratio = "Unusual Expense EBIT Ratio"
@@ -230,9 +261,13 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     is_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rates
 
     # Calculate driver ratios
+    initialize_ratio_row(is_df, div_per_share, diluted_eps, "Dividend Payout Ratio")
+    initialize_ratio_row(is_df, ebitda, sales, "EBITDA Margin", sales_growth)
+    is_df.loc[dna_ratio].iloc[-yrs_to_predict:] = is_df.at[dna_ratio, last_given_yr]
     driver_extend(is_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, unusual_ratio, "avg", last_given_yr, yrs_to_predict)
+    driver_extend(is_df, diluted_share_outstanding, "avg", last_given_yr, yrs_to_predict, 3)
     driver_extend(is_df, effective_tax, "avg", last_given_yr, yrs_to_predict)
 
     # Calculate fixed variables
@@ -241,7 +276,7 @@ def process_is(is_df, growth_rates, yrs_to_predict):
     fixed_extend(is_df, other_expense, 'prev', yrs_to_predict)
 
     # Calculate net income
-    is_df.loc[searched_label(is_df.index, "net income")] = [
+    is_df.loc[net_income] = [
         '={}-{}'.format(excel_cell(is_df, pretax, yr), excel_cell(is_df, income_tax, yr))
         for yr in is_df.columns
     ]
@@ -260,6 +295,9 @@ def process_is(is_df, growth_rates, yrs_to_predict):
         is_df.at[gross_income, cur_yr] = '={}-{}'.format(
             excel_cell(is_df, sales, cur_yr), excel_cell(is_df, cogs, cur_yr)
         )
+        is_df.at[dna_expense, cur_yr] = '={}*{}'.format(
+            excel_cell(is_df, sales, cur_yr), excel_cell(is_df, dna_ratio, cur_yr)
+        )
         is_df.at[sgna, cur_yr] = '={}*{}'.format(
             excel_cell(is_df, sales, cur_yr), excel_cell(is_df, sgna_ratio, cur_yr)
         )
@@ -277,6 +315,15 @@ def process_is(is_df, growth_rates, yrs_to_predict):
         is_df.at[income_tax, cur_yr] = '={}*{}'.format(
              excel_cell(is_df, pretax, cur_yr), excel_cell(is_df, effective_tax, cur_yr)
         )
+        is_df.at[diluted_eps, cur_yr] = '={}/{}'.format(
+            excel_cell(is_df, net_income, cur_yr),
+            excel_cell(is_df, diluted_share_outstanding,cur_yr)
+        )
+        is_df.at[ebitda, cur_yr] = '={}+{}'.format(
+            excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
+        )
+    print(is_df.iloc[:, -yrs_to_predict] == '0')
+
     return is_df
 
 
@@ -536,7 +583,7 @@ def main():
     cash_flow = preprocess(cash_flow)
 
     # FIXME temporary slices of data
-    income_statement = income_statement[:14]
+    income_statement = income_statement[:21]
     balance_sheet = balance_sheet[:31]
     cash_flow = cash_flow[:26]
 
@@ -544,7 +591,7 @@ def main():
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
 
-    income_statement = process_is(income_statement, growth_rates, yrs_to_predict)
+    income_statement = process_is(income_statement, cash_flow, growth_rates, yrs_to_predict)
     balance_sheet = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
