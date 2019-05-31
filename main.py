@@ -14,7 +14,6 @@ CF = "Cashflow Statement"
 FIXME BUGS:
     Empty row with same label disturbs excel_cell.
     Make sure only insert before assigning formulas.
-    How to remove unmodified rows: requires a lot of code changes.
 """
 
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
@@ -153,6 +152,7 @@ def filter_in(df, filters):
              list(df[df.iloc[:, 1].isna()].index)
     df.drop([label for label in df.index if label not in labels], inplace=True)
 
+
 def preprocess(df, filter_in=[]):
     # Reverse columns
     df = df.loc[:, ::-1]
@@ -179,6 +179,11 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     # Short-hands
     first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
+
+    # 
+    is_df = pd.concat([pd.DataFrame({yr: [np.nan] * 6 for yr in is_df.columns}, index=[np.nan] * 6), is_df])
+    #is_df = pd.concat([pd.DataFrame({row: np.nan for row in is_df.index}, index=[np.nan]), is_df], axis=1)
+
 
     # Income statement labels
     sales = searched_label(is_df.index, "total sales")
@@ -330,8 +335,6 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         is_df.at[ebitda, cur_yr] = '={}+{}'.format(
             excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
         )
-
-    #is_df.iloc[np.where(is_df.iloc[:, -1] == '0')].index
 
     return is_df
 
@@ -582,6 +585,14 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     return cf_df
 
 
+def style_is(workbook, worksheet):
+    cell_format = workbook.add_format({'bold': False})
+    cell_format.set_border(0)
+    cell_format.set_border_color("white")
+    worksheet.set_column(0, 0, 50, cell_format)
+    worksheet.write('A2', 'hello', cell_format)
+
+
 def main():
     income_statement = pd.read_excel("asset/NVIDIA/NVIDIA Income Statement.xlsx", header=4,
                                      index_col=0)
@@ -608,6 +619,11 @@ def main():
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
 
+    # Cast year data type
+    income_statement.columns = income_statement.columns.astype(int)
+    balance_sheet.columns = balance_sheet.columns.astype(int)
+    cash_flow.columns = cash_flow.columns.astype(int)
+
     income_statement = process_is(income_statement, cash_flow, growth_rates, yrs_to_predict)
     balance_sheet = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
@@ -616,9 +632,7 @@ def main():
     income_statement.to_excel(writer, sheet_name=IS)
     balance_sheet.to_excel(writer, sheet_name=BS)
     cash_flow.to_excel(writer, sheet_name=CF)
-    workbook = writer.book
-    worksheet = writer.sheets[IS]
-    worksheet.write('B11', "DSJAIODJSAIO")
+    style_is(writer.book, writer.sheets[IS])
     writer.save()
 
 
