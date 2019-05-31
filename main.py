@@ -11,7 +11,9 @@ CF = "Cashflow Statement"
 
 """
 FIXME BUGS:
-    Empty row with same label disturbes excel_cell.
+    Empty row with same label disturbs excel_cell.
+    Make sure only insert before assigning formulas.
+    How to remove unmodified rows: requires a lot of code changes.
 """
 
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
@@ -322,7 +324,8 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         is_df.at[ebitda, cur_yr] = '={}+{}'.format(
             excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
         )
-    print(is_df.iloc[:, -yrs_to_predict] == '0')
+
+    #is_df.iloc[np.where(is_df.iloc[:, -1] == '0')].index
 
     return is_df
 
@@ -574,9 +577,9 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
 
 def main():
-    income_statement = pd.read_excel("asset/NVIDIA Income Statement.xlsx", header=4, index_col=0)
-    balance_sheet = pd.read_excel("asset/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    income_statement = pd.read_excel("asset/NVIDIA/NVIDIA Income Statement.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("asset/NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement = preprocess(income_statement)
     balance_sheet = preprocess(balance_sheet)
@@ -594,10 +597,6 @@ def main():
     income_statement = process_is(income_statement, cash_flow, growth_rates, yrs_to_predict)
     balance_sheet = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
-
-    print(income_statement)
-    print(balance_sheet)
-    print(cash_flow)
 
     with pd.ExcelWriter("output.xlsx") as writer:
         income_statement.to_excel(writer, sheet_name=IS)
