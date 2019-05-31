@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import xlsxwriter
 import numpy as np
 import pandas as pd
 
@@ -147,7 +148,12 @@ def searched_label(labels, target):
     return max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
 
 
-def preprocess(df):
+def filter_in(df, filters):
+    labels = [searched_label(df.index, label) for label in filters] + \
+             list(df[df.iloc[:, 1].isna()].index)
+    df.drop([label for label in df.index if label not in labels], inplace=True)
+
+def preprocess(df, filter_in=[]):
     # Reverse columns
     df = df.loc[:, ::-1]
 
@@ -577,7 +583,8 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
 
 def main():
-    income_statement = pd.read_excel("asset/NVIDIA/NVIDIA Income Statement.xlsx", header=4, index_col=0)
+    income_statement = pd.read_excel("asset/NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+                                     index_col=0)
     balance_sheet = pd.read_excel("asset/NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
     cash_flow = pd.read_excel("asset/NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
@@ -590,6 +597,13 @@ def main():
     balance_sheet = balance_sheet[:31]
     cash_flow = cash_flow[:26]
 
+    # FIXME temporary filter in labels
+    filter_in(income_statement, [
+        "sales", "cost of good sold", "gross income", "sg&a expense", "other expense",
+        "ebit operating income", "nonoperating income net", "interest expense",
+        "unusual expense", "income taxes", "dilute eps", "net income", "div per share", "ebitda"
+    ])
+
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
@@ -598,10 +612,14 @@ def main():
     balance_sheet = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
-    with pd.ExcelWriter("output.xlsx") as writer:
-        income_statement.to_excel(writer, sheet_name=IS)
-        balance_sheet.to_excel(writer, sheet_name=BS)
-        cash_flow.to_excel(writer, sheet_name=CF)
+    writer = pd.ExcelWriter("output.xlsx", engine='xlsxwriter')
+    income_statement.to_excel(writer, sheet_name=IS)
+    balance_sheet.to_excel(writer, sheet_name=BS)
+    cash_flow.to_excel(writer, sheet_name=CF)
+    workbook = writer.book
+    worksheet = writer.sheets[IS]
+    worksheet.write('B11', "DSJAIODJSAIO")
+    writer.save()
 
 
 if __name__ == "__main__":
