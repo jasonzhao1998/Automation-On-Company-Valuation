@@ -1,6 +1,9 @@
 import os
 import re
 import time
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 import xlsxwriter
 import numpy as np
 import pandas as pd
@@ -11,9 +14,13 @@ BS = "Balance Sheet"
 CF = "Cashflow Statement"
 
 """
+IMPLEMENTATION:
+    Insert one column and debug.
+    Get name of company from dataset.
+    Change SUM algorithm.
+    
 FIXME BUGS:
     Empty row with same label disturbs excel_cell.
-    Change SUM algorithm.
 """
 def empty_unmodified(df, yrs_to_predict):
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
@@ -132,12 +139,12 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
     letter = chr(ord('A') + df.columns.get_loc(col_label) + 1)
     row_mask = df.index.get_loc(row_label)
     if type(row_mask) is int:
-        return letter + str(2 + row_mask)
+        return letter + str(3 + row_mask)
     else:
         nearby_index = df.index.get_loc(nearby_label)
         matched_indices = [i for i, j in enumerate(row_mask) if j]
         distance_vals = [abs(nearby_index - i) for i in matched_indices]
-        return letter + str(2 + matched_indices[distance_vals.index(min(distance_vals))])
+        return letter + str(3 + matched_indices[distance_vals.index(min(distance_vals))])
 
 
 def searched_label(labels, target):
@@ -191,9 +198,8 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
 
-    # 
-    is_df = pd.concat([pd.DataFrame({yr: [np.nan] * 6 for yr in is_df.columns}, index=[np.nan] * 6), is_df])
-    #is_df = pd.concat([pd.DataFrame({row: np.nan for row in is_df.index}, index=[np.nan]), is_df], axis=1)
+    # FIXME
+    is_df = pd.concat([pd.DataFrame({yr: [np.nan] * 4 for yr in is_df.columns}, index=[np.nan] * 4), is_df])
 
 
     # Income statement labels
@@ -559,7 +565,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(cf_df, change_in_capital_stock, cur_yr), IS,
             excel_cell(is_df, net_income, cur_yr), CF, excel_cell(cf_df, cash_div_paid, cur_yr)
         )
-    print(bs_df.loc["Inventory Turnover Ratio"])
+
     empty_unmodified(bs_df, yrs_to_predict)
 
     return bs_df, cf_df
@@ -723,12 +729,38 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     return cf_df
 
 
-def style_is(workbook, worksheet):
-    cell_format = workbook.add_format({'bold': False})
-    cell_format.set_border(0)
-    cell_format.set_border_color("white")
-    worksheet.set_column(0, 0, 50, cell_format)
-    worksheet.write('A2', 'hello', cell_format)
+def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border(),
+                alignment=Alignment()):
+    letter1, num1 = start[0], start[1:]
+    letter2, num2 = end[0], end[1:]
+    if letter1 == letter2:  # column
+        for i in range(int(num1), int(num2) + 1):
+            ws[letter1 + str(i)].font = font
+            ws[letter1 + str(i)].fill = fill
+            ws[letter1 + str(i)].border = border
+            ws[letter1 + str(i)].alignment = alignment
+    elif num1 == num2:  # row
+        for i in range(ord(letter2) - ord(letter1) + 1):
+            ws[chr(ord(letter1) + i) + num1].font = font
+            ws[chr(ord(letter1) + i) + num1].fill = fill
+            ws[chr(ord(letter1) + i) + num1].border = border
+            ws[chr(ord(letter1) + i) + num1].alignment = alignment
+    else:
+        print("ERROR: style_range")
+        exit(1)
+
+
+def style_is(ws):
+    # ws.insert_cols(1)
+    ws.sheet_view.showGridLines = False
+    ws.move_range("A1:P1", rows=4)
+    ws.column_dimensions['A'].width = 50
+    ws['A2'] = "Income Statement"
+    ws['A2'].font = Font(bold=True)
+    ws['A2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+    ws['A3'] = "($ in millions of U.S. Dollar)"
+    ws['A3'].font = Font(italic=True)
+    style_range(ws, 'A3', 'P3', fill=PatternFill(fill_type='solid', fgColor='bababa'))
 
 
 def main():
@@ -766,13 +798,18 @@ def main():
     balance_sheet, cash_flow = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
-    writer = pd.ExcelWriter("output.xlsx", engine='xlsxwriter')
-    income_statement.to_excel(writer, sheet_name=IS)
-    balance_sheet.to_excel(writer, sheet_name=BS)
-    cash_flow.to_excel(writer, sheet_name=CF)
-    style_is(writer.book, writer.sheets[IS])
-    writer.save()
-
+    wb = openpyxl.Workbook()
+    wb['Sheet'].title = IS
+    wb.create_sheet(BS)
+    wb.create_sheet(CF)
+    for r in dataframe_to_rows(income_statement):
+        wb[IS].append(r)
+    for r in dataframe_to_rows(balance_sheet):
+        wb[BS].append(r)
+    for r in dataframe_to_rows(cash_flow):
+        wb[CF].append(r)
+    style_is(wb[IS])
+    wb.save("output.xlsx")
 
 if __name__ == "__main__":
     main()
