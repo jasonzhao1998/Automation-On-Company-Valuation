@@ -13,7 +13,7 @@ CF = "Cashflow Statement"
 """
 FIXME BUGS:
     Empty row with same label disturbs excel_cell.
-    Make sure only insert before assigning formulas.
+    Change SUM algorithm.
 """
 
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
@@ -28,6 +28,12 @@ def insert_before(df, new_df, label):
     """Insert new DataFrame before the corresponding label row."""
     index = list(df.index).index(searched_label(df.index, label))
     return pd.concat([df.iloc[:index], new_df, df[index:]])
+
+
+def insert_after(df, new_df, label):
+    """Insert new DataFrame after the corresponding label row."""
+    index = list(df.index).index(searched_label(df.index, label))
+    return pd.concat([df.iloc[:index + 1], new_df, df[index + 1:]])
 
 
 def add_empty_row(df):
@@ -50,7 +56,7 @@ def add_yr_column(df):
 def add_growth_rate_row(df, label, new_label):
     df.loc[new_label] = [np.nan] + [
         '={}/{}-1'.format(
-            excel_cell(df, label, df.columns[i]), excel_cell(df, label, df.columns[i + 1])
+            excel_cell(df, label, df.columns[i + 1]), excel_cell(df, label, df.columns[i])
         ) for i in range(len(df.columns) - 1)
     ]
 
@@ -82,7 +88,7 @@ def fixed_extend(df, row_label, how, yrs):
         else:
             df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
     elif how is "zero":
-        df.at[row_label, df.columns[-yrs:]] = 6
+        df.at[row_label, df.columns[-yrs:]] = 0
     else:
         print("ERROR: fixed_extend")
         exit(1)
@@ -556,6 +562,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     change_in_capital_stock = searched_label(cf_df.index, "change in capital stock")
     net_inssuance_reduction_of_debt = searched_label(cf_df.index, "net issuance reduct debt")
     net_financing_cf = searched_label(cf_df.index, "net financ cash flow cf")
+    net_change_in_cash = searched_label(cf_df.index, "net change in cash")
     cash_balance = searched_label(cf_df.index, "cash balance")
     capex_ratio = "Capital Expenditure Revenue Ratio"
     other_funds_net_operating_ratio = "Other Funds Net Operating CF Ratio"
@@ -568,10 +575,10 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     div_per_share = searched_label(is_df.index, "dividend per share")
 
     # Balance sheet labels
-    st_receivables = searched_label(bs_df.index, "short term receivable")
-    other_cur_assets = searched_label(bs_df.index, "other current asset")
-    accounts_payable = searched_label(bs_df.index, "accounts payable")
-    other_cur_liabilities = searched_label(bs_df.index, "other current liabilit")
+    cash_st_investments = searched_label(bs_df.index, "cash short term investment")
+    total_cur_assets = searched_label(bs_df.index, "total current asset")
+    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "short term debt cur portion lt")
+    total_cur_liabilities = searched_label(bs_df.index, "total current liabilit")
     lt_debt = searched_label(bs_df.index, "long term debt")
 
     # Add levered free CF row
@@ -597,6 +604,85 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     fixed_extend(cf_df, net_asset_acquisition, "zero", yrs_to_predict)
     fixed_extend(cf_df, fixed_assets_n_businesses_sale, "zero", yrs_to_predict)
     fixed_extend(cf_df, purchase_sale_of_investments, "zero", yrs_to_predict)
+    fixed_extend(cf_df, change_in_capital_stock, "prev", yrs_to_predict)
+
+    # Calculate net operating CF
+    cf_df.loc[net_operating_cf] = [
+        '={}+{}'.format(
+            excel_cell(cf_df, funds_from_operations, yr),
+            excel_cell(cf_df, changes_in_working_capital, yr)
+        ) for yr in cf_df.columns
+    ]
+
+    # Calculate net investing CF
+    cf_df.loc[net_investing_cf] = [
+        '=SUM({}:{})'.format(
+            excel_cell(cf_df, capital_expenditures, yr),
+            excel_cell(cf_df, other_funds, yr, nearby_label=capital_expenditures)
+        ) for yr in cf_df.columns
+    ]
+
+    # Calcualate net financing CF
+    cf_df.loc[net_financing_cf] = [
+        '=SUM({}:{})'.format(
+            excel_cell(cf_df, cash_div_paid, yr),
+            excel_cell(cf_df, other_funds, yr, nearby_label=cash_div_paid)
+        ) for yr in cf_df.columns
+    ]
+
+    # Calculate net change in cash
+    cf_df.loc[net_change_in_cash] = [
+        '={}+{}+{}'.format(
+            excel_cell(cf_df, net_operating_cf, yr), excel_cell(cf_df, net_investing_cf, yr),
+            excel_cell(cf_df, net_financing_cf, yr)
+        ) for yr in cf_df.columns
+    ]
+
+    for i in range(yrs_to_predict):
+        cur_yr = is_df.columns[-yrs_to_predict + i]
+        prev_yr = is_df.columns[-yrs_to_predict + i - 1]    
+
+        # Calculate variables
+        cf_df.at[net_income_cf, cur_yr] = "='{}'!{}".format(
+            IS, excel_cell(is_df, net_income_is, cur_yr)
+        )
+        cf_df.at[deprec_deplet_n_amort, cur_yr] = "='{}'!{}".format(
+            IS, excel_cell(is_df, deprec_amort_expense, cur_yr)
+        )
+
+        cf_df.at[funds_from_operations, cur_yr] = "=SUM({}:{})".format(
+            excel_cell(cf_df, net_income_cf, cur_yr),
+            excel_cell(cf_df, other_funds, cur_yr, nearby_label=net_operating_cf)
+        )
+
+        cf_df.at[changes_in_working_capital, cur_yr] = "=('{}'!{}-'{}'!{})".format(
+            BS, excel_cell(bs_df, total_cur_assets, prev_yr),
+            BS, excel_cell(bs_df, cash_st_investments, prev_yr)
+        )
+        cf_df.at[changes_in_working_capital, cur_yr] += "-('{}'!{}-'{}'!{})".format(
+            BS, excel_cell(bs_df, total_cur_assets, cur_yr),
+            BS, excel_cell(bs_df, cash_st_investments, cur_yr)
+        )
+        cf_df.at[changes_in_working_capital, cur_yr] += "+('{}'!{}-'{}'!{})".format(
+            BS, excel_cell(bs_df, total_cur_liabilities, cur_yr),
+            BS, excel_cell(bs_df, st_debt_n_cur_portion_lt_debt, cur_yr)
+        )
+        cf_df.at[changes_in_working_capital, cur_yr] += "-('{}'!{}-'{}'!{})".format(
+            BS, excel_cell(bs_df, total_cur_liabilities, prev_yr),
+            BS, excel_cell(bs_df, st_debt_n_cur_portion_lt_debt, prev_yr)
+        )
+
+        cf_df.at[capital_expenditures, cur_yr] = "=-'{}'!{}*{}".format(
+            IS, excel_cell(is_df, sales, cur_yr), excel_cell(cf_df, capex_ratio, cur_yr)
+        )
+        cf_df.at[cash_div_paid, cur_yr] = "=-'{}'!{}*'{}'!{}".format(
+            IS, excel_cell(is_df, diluted_share_outstanding, cur_yr),
+            IS, excel_cell(is_df, div_per_share, cur_yr)
+        )
+        cf_df.at[net_inssuance_reduction_of_debt, cur_yr] = "='{}'!{}-'{}'!{}".format(
+            BS, excel_cell(bs_df, lt_debt, cur_yr),
+            BS, excel_cell(bs_df, lt_debt, prev_yr)
+        )
 
     return cf_df
 
