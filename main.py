@@ -15,6 +15,11 @@ FIXME BUGS:
     Empty row with same label disturbs excel_cell.
     Change SUM algorithm.
 """
+def empty_unmodified(df, yrs_to_predict):
+    unmodified = df.iloc[:, -yrs_to_predict] == '0'
+    df.loc[unmodified, :] = np.nan
+    df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
+
 
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
     """Create a new label and set a fractional formula for initialization."""
@@ -342,6 +347,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         is_df.at[ebitda, cur_yr] = '={}+{}'.format(
             excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
         )
+    empty_unmodified(is_df, yrs_to_predict)
 
     return is_df
 
@@ -536,6 +542,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(cf_df, change_in_capital_stock, cur_yr), IS,
             excel_cell(is_df, net_income, cur_yr), CF, excel_cell(cf_df, cash_div_paid, cur_yr)
         )
+    empty_unmodified(bs_df, yrs_to_predict)
 
     return bs_df
 
@@ -580,6 +587,18 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "short term debt cur portion lt")
     total_cur_liabilities = searched_label(bs_df.index, "total current liabilit")
     lt_debt = searched_label(bs_df.index, "long term debt")
+
+    # Insert cash balance
+    cash_balance_df = pd.DataFrame({yr: np.nan for yr in cf_df.columns}, index=["Cash Balance"])
+    cf_df = insert_after(cf_df, cash_balance_df, "net change in tax")
+    cf_df.loc["Cash Balance"].iloc[-yrs_to_predict - 1:] = [
+        "='{}'!{}".format(BS, excel_cell(bs_df, cash_st_investments, last_given_yr))
+    ] + [
+        '={}+{}'.format(
+            excel_cell(cf_df, "Cash Balance", cf_df.columns[-yrs_to_predict + i - 1]),
+            excel_cell(cf_df, net_change_in_cash, cf_df.columns[-yrs_to_predict + i])
+        ) for i in range(yrs_to_predict)
+    ]
 
     # Add levered free CF row
     cf_df.loc["Levered Free Cash Flow"] = [
@@ -683,6 +702,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
             BS, excel_cell(bs_df, lt_debt, cur_yr),
             BS, excel_cell(bs_df, lt_debt, prev_yr)
         )
+    empty_unmodified(cf_df, yrs_to_predict)
 
     return cf_df
 
