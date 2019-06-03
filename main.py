@@ -276,7 +276,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     # Calculate driver ratios
     initialize_ratio_row(is_df, div_per_share, diluted_eps, "Dividend Payout Ratio")
     initialize_ratio_row(is_df, ebitda, sales, "EBITDA Margin", sales_growth)
-    is_df.loc[dna_ratio].iloc[-yrs_to_predict:] = is_df.at[dna_ratio, last_given_yr]
+    is_df.loc[dna_ratio].iloc[-yrs_to_predict:] = is_df.loc[dna_ratio, last_given_yr]
     driver_extend(is_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
     driver_extend(is_df, unusual_ratio, "avg", last_given_yr, yrs_to_predict)
@@ -287,6 +287,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     fixed_extend(is_df, nonoperating_income, 'prev', yrs_to_predict)
     fixed_extend(is_df, interest_expense, 'prev', yrs_to_predict)
     fixed_extend(is_df, other_expense, 'prev', yrs_to_predict)
+    fixed_extend(is_df, div_per_share, 'prev', yrs_to_predict)
 
     # Calculate net income
     is_df.loc[net_income] = [
@@ -366,8 +367,9 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     deferred_tax_liabilities = searched_label(bs_df.index, "deferred tax liabilities")
     other_liabilities = searched_label(bs_df.index, "other liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
+    total_shareholder_equity = searched_label(bs_df.index, "total shareholder equity")
     total_liabilities_n_shareholders_equity = searched_label(
-        bs_df.index, "total liabilities shareholder, equity"
+        bs_df.index, "total liabilities shareholder equity"
     )
 
     # Income statement labels
@@ -450,8 +452,9 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     bs_df = insert_before(bs_df, balance_df, "working capital")
 
     # Calculate driver ratios
-    bs_df.loc[dso][last_given_yr:] = '=' + \
-                                     excel_cell(bs_df, dso, bs_df.columns[-yrs_to_predict - 2])
+    bs_df.loc[dso].iloc[-yrs_to_predict:] = '=' + excel_cell(
+        bs_df,dso, bs_df.columns[-yrs_to_predict - 2]
+    )
     driver_extend(bs_df, dpo, "avg", last_given_yr, yrs_to_predict)
     driver_extend(bs_df, other_cur_assets_growth, "avg", last_given_yr, yrs_to_predict)
     driver_extend(bs_df, misc_cur_liabilities_growth, "avg", last_given_yr, yrs_to_predict)
@@ -467,6 +470,14 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     fixed_extend(bs_df, provision_for_risks_n_charges, 'prev', yrs_to_predict)
     fixed_extend(bs_df, deferred_tax_liabilities, 'prev', yrs_to_predict)
     fixed_extend(bs_df, other_liabilities, 'prev', yrs_to_predict)
+
+    # Calculate total liabilities & shareholders' equity
+    bs_df.loc[total_liabilities_n_shareholders_equity] = [
+        '={}+{}'.format(
+            excel_cell(bs_df, total_liabilities, yr),
+            excel_cell(bs_df, total_shareholder_equity, yr)
+        ) for yr in is_df.columns
+    ]
 
     for i in range(yrs_to_predict):
         cur_yr = bs_df.columns[-yrs_to_predict + i]
@@ -513,6 +524,11 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
         bs_df.at[total_liabilities, cur_yr] = '={}+SUM({}:{})'.format(
             excel_cell(bs_df, total_cur_liabilities, cur_yr),
             excel_cell(bs_df, lt_debt, cur_yr), excel_cell(bs_df, other_liabilities, cur_yr)
+        )
+        bs_df.at[total_shareholder_equity, cur_yr] = "={}+'{}'!{}+'{}'!{}+'{}'!{}".format(
+            excel_cell(bs_df, total_shareholder_equity, prev_yr), CF,
+            excel_cell(cf_df, change_in_capital_stock, cur_yr), IS,
+            excel_cell(is_df, net_income, cur_yr), CF, excel_cell(cf_df, cash_div_paid, cur_yr)
         )
 
     return bs_df
@@ -594,10 +610,10 @@ def style_is(workbook, worksheet):
 
 
 def main():
-    income_statement = pd.read_excel("asset/NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("asset/NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement = preprocess(income_statement)
     balance_sheet = preprocess(balance_sheet)
