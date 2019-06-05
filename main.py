@@ -15,9 +15,9 @@ CF = "Cashflow Statement"
 
 """
 IMPLEMENTATION:
-    Insert one column and debug.
     Get name of company from dataset.
     Change SUM algorithm.
+    Fiscal year end.
     
 FIXME BUGS:
     Empty row with same label disturbs excel_cell.
@@ -136,7 +136,7 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
     if not row_label:
         print("ERROR: excel_cell")
         exit(1)
-    letter = chr(ord('A') + df.columns.get_loc(col_label) + 1)
+    letter = chr(ord('A') + df.columns.get_loc(col_label) + 2)
     row_mask = df.index.get_loc(row_label)
     if type(row_mask) is int:
         return letter + str(3 + row_mask)
@@ -198,8 +198,10 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
 
-    # FIXME
-    is_df = pd.concat([pd.DataFrame({yr: [np.nan] * 4 for yr in is_df.columns}, index=[np.nan] * 4), is_df])
+    # Insert 4 empty rows
+    is_df = pd.concat(
+        [pd.DataFrame({yr: [np.nan] * 4 for yr in is_df.columns}, index=[np.nan] * 4), is_df]
+    )
 
 
     # Income statement labels
@@ -362,6 +364,11 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     # Short-hands
     first_yr = bs_df.columns[0]
     last_given_yr = bs_df.columns[-1]
+
+    # Insert 4 empty rows
+    bs_df = pd.concat(
+        [pd.DataFrame({yr: [np.nan] * 4 for yr in bs_df.columns}, index=[np.nan] * 4), bs_df]
+    )
 
     # Balance sheet labels
     st_receivables = searched_label(bs_df.index, "short term receivable")
@@ -576,6 +583,11 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     first_yr = cf_df.columns[0]
     last_given_yr = cf_df.columns[-yrs_to_predict-1]
 
+    # Insert 4 empty rows
+    cf_df = pd.concat(
+        [pd.DataFrame({yr: [np.nan] * 4 for yr in cf_df.columns}, index=[np.nan] * 4), cf_df]
+    )
+
     # Cash flow statement labels
     net_income_cf = searched_label(cf_df.index, "net income")
     deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization")
@@ -750,17 +762,35 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
         exit(1)
 
 
-def style_is(ws):
-    # ws.insert_cols(1)
-    ws.sheet_view.showGridLines = False
-    ws.move_range("A1:P1", rows=4)
-    ws.column_dimensions['A'].width = 50
-    ws['A2'] = "Income Statement"
-    ws['A2'].font = Font(bold=True)
-    ws['A2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
-    ws['A3'] = "($ in millions of U.S. Dollar)"
-    ws['A3'].font = Font(italic=True)
-    style_range(ws, 'A3', 'P3', fill=PatternFill(fill_type='solid', fgColor='bababa'))
+def style_is(ws, sheet_name):
+    border = Side(border_style="thin", color="000000")
+
+    # Insert empty column to beginning
+    ws.insert_cols(1)
+
+    letter, num = ws.dimensions.split(':')[1][0], ws.dimensions.split(':')[1][1:]
+
+    ws.sheet_view.showGridLines = False  # No grid lines
+    ws.move_range('C1:' + letter + '1', rows=4)  # Move year row down
+    ws.column_dimensions['B'].width = 50  # Change width of labels
+
+    ws['B2'] = sheet_name
+    ws['B2'].font = Font(bold=True)
+    ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+    ws['B3'] = "($ in millions of U.S. Dollar)"
+    ws['B3'].font = Font(italic=True)
+    style_range(ws, 'B3', letter + '3', fill=PatternFill(fill_type='solid', fgColor='bababa'))
+
+    # Central element Annual
+    ws[chr((ord('C') + ord(letter)) // 2) + '3'] = "Annual"
+    ws[chr((ord('C') + ord(letter)) // 2) + '3'].font = Font(bold=True)
+
+    # Year row style
+    style_range(ws, 'C5', letter + '5', font=Font(bold=True, underline="single"),
+                border=Border(top=border, bottom=border))
+
+    # Label column
+    style_range(ws, 'B7', 'B' + num, fill=PatternFill(fill_type='solid', fgColor='dddddd'))
 
 
 def main():
@@ -808,7 +838,9 @@ def main():
         wb[BS].append(r)
     for r in dataframe_to_rows(cash_flow):
         wb[CF].append(r)
-    style_is(wb[IS])
+    style_is(wb[IS], IS)
+    style_is(wb[BS], BS)
+    style_is(wb[CF], CF)
     wb.save("output.xlsx")
 
 if __name__ == "__main__":
