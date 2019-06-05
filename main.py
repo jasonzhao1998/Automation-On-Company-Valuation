@@ -17,10 +17,6 @@ CF = "Cashflow Statement"
 IMPLEMENTATION:
     Get name of company from dataset.
     Change SUM algorithm.
-    Fiscal year end.
-    
-FIXME BUGS:
-    Empty row with same label disturbs excel_cell.
 """
 def empty_unmodified(df, yrs_to_predict):
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
@@ -355,9 +351,16 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             excel_cell(is_df, net_income, cur_yr),
             excel_cell(is_df, diluted_share_outstanding,cur_yr)
         )
-        is_df.at[ebitda, cur_yr] = '={}+{}'.format(
-            excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
-        )
+        if type(is_df.at[ebitda, cur_yr]) is 'str':
+            is_df.at[ebitda, cur_yr] = '={}+{}'.format(
+                excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
+            )
+        else:
+            is_df.at[ebitda, cur_yr] = [
+                np.nan, '={}+{}'.format(
+                    excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
+                )
+            ]
     empty_unmodified(is_df, yrs_to_predict)
 
     return is_df, cf_df
