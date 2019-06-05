@@ -31,7 +31,8 @@ def empty_unmodified(df, yrs_to_predict):
 def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
     """Create a new label and set a fractional formula for initialization."""
     df.loc[new_label] = [
-        '={}/{}'.format(excel_cell(df, top_label, col, nearby_label), excel_cell(df, bot_label, col))
+        '={}/{}'.format(excel_cell(df, top_label, col, nearby_label),
+                        excel_cell(df, bot_label, col))
         for col in df.columns
     ]
 
@@ -186,11 +187,11 @@ def preprocess(df, filter_in=[]):
     df = df[1:]
 
     # Change dates to only years
+    fye = df.columns[1]
     df.columns = [
         '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
     ]
-
-    return df
+    return df, fye
 
 
 def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
@@ -202,7 +203,9 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     is_df = pd.concat(
         [pd.DataFrame({yr: [np.nan] * 4 for yr in is_df.columns}, index=[np.nan] * 4), is_df]
     )
-
+    cf_df = pd.concat(
+        [pd.DataFrame({yr: [np.nan] * 4 for yr in cf_df.columns}, index=[np.nan] * 4), cf_df]
+    )
 
     # Income statement labels
     sales = searched_label(is_df.index, "total sales")
@@ -357,7 +360,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         )
     empty_unmodified(is_df, yrs_to_predict)
 
-    return is_df
+    return is_df, cf_df
 
 
 def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
@@ -583,11 +586,6 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     first_yr = cf_df.columns[0]
     last_given_yr = cf_df.columns[-yrs_to_predict-1]
 
-    # Insert 4 empty rows
-    cf_df = pd.concat(
-        [pd.DataFrame({yr: [np.nan] * 4 for yr in cf_df.columns}, index=[np.nan] * 4), cf_df]
-    )
-
     # Cash flow statement labels
     net_income_cf = searched_label(cf_df.index, "net income")
     deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization")
@@ -762,7 +760,7 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
         exit(1)
 
 
-def style_is(ws, sheet_name):
+def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
     border = Side(border_style="thin", color="000000")
 
     # Insert empty column to beginning
@@ -784,14 +782,64 @@ def style_is(ws, sheet_name):
     # Central element Annual
     ws[chr((ord('C') + ord(letter)) // 2) + '3'] = "Annual"
     ws[chr((ord('C') + ord(letter)) // 2) + '3'].font = Font(bold=True)
+    ws[chr((ord('C') + ord(letter)) // 2) + '4'] = "FYE " + fye
 
     # Year row style
     style_range(ws, 'C5', letter + '5', font=Font(bold=True, underline="single"),
-                border=Border(top=border, bottom=border))
+                border=Border(top=border, bottom=border),
+                alignment=Alignment(horizontal="center", vertical="center"))
 
     # Label column
     style_range(ws, 'B7', 'B' + num, fill=PatternFill(fill_type='solid', fgColor='dddddd'))
 
+    # Style sum rows
+    for cell in [letter + str(i + 1) for i in range(int(num) - 1)]:
+        if type(ws[cell].value) is str and 'SUM' in ws[cell].value and len(ws[cell].value) < 30:
+            num = cell[1:]
+            ws['B' + num].font = Font(bold=True)
+            style_range(ws, 'C' + num, letter + num, font=Font(bold=True),
+                        border=Border(top=border))
+
+    # Style specific rows
+    def style_row(ws, label, sheet_name, is_df, bs_df, cf_df, border_bool=True, bold_bool=True,
+                  underline=None):
+        df = None
+        num = 0
+        if sheet_name == IS:
+            num = str(int(excel_cell(is_df, searched_label(is_df.index, label),
+                                     is_df.columns[0])[1:]))
+        elif sheet_name == BS:
+            num = str(int(excel_cell(bs_df, searched_label(bs_df.index, label),
+                                     bs_df.columns[0])[1:]))
+        elif sheet_name == CF:
+            num = str(int(excel_cell(cf_df, searched_label(cf_df.index, label),
+                                     cf_df.columns[0])[1:]))
+        ws['B' + num].font = Font(bold=True, underline=underline)
+        border_style = Border(top=border) if border_bool else Border()
+        bold_style = Font(bold=True) if bold_bool else Font()
+        style_range(ws, 'C' + num, letter + num, font=bold_style, border=border_style)
+
+    if sheet_name == IS:
+        style_row(ws, "total sales", IS, is_df, bs_df, cf_df, False)
+        style_row(ws, "gross income", IS, is_df, bs_df, cf_df)
+        style_row(ws, "ebit operating income", IS, is_df, bs_df, cf_df)
+        style_row(ws, "ebit operating income", IS, is_df, bs_df, cf_df)
+        style_row(ws, "pretax income", IS, is_df, bs_df, cf_df)
+        style_row(ws, "net income", IS, is_df, bs_df, cf_df)
+        style_row(ws, "driver ratio", IS, is_df, bs_df, cf_df, underline="single",
+                  border_bool=False)
+    elif sheet_name == BS:
+        style_row(ws, "total shareholder equity", BS, is_df, bs_df, cf_df, bold_bool=False,
+                  border_bool=False)
+        style_row(ws, "total liabilit shareholder equity", BS, is_df, bs_df, cf_df,
+                  border_bool=False)
+        style_row(ws, "driver ratio", BS, is_df, bs_df, cf_df, underline="single",
+                  border_bool=False)
+    elif sheet_name == CF:
+        style_row(ws, "net operating cash flow cf", CF, is_df, bs_df, cf_df)
+        style_row(ws, "cash balance", CF, is_df, bs_df, cf_df, border_bool=False)
+        style_row(ws, "driver ratio", CF, is_df, bs_df, cf_df, underline="single",
+                  border_bool=False)
 
 def main():
     income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
@@ -799,9 +847,9 @@ def main():
     balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
     cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
-    income_statement = preprocess(income_statement)
-    balance_sheet = preprocess(balance_sheet)
-    cash_flow = preprocess(cash_flow)
+    income_statement, _ = preprocess(income_statement)
+    balance_sheet, _ = preprocess(balance_sheet)
+    cash_flow, fye = preprocess(cash_flow)
 
     # FIXME temporary slices of data
     income_statement = income_statement[:21]
@@ -824,8 +872,10 @@ def main():
     balance_sheet.columns = balance_sheet.columns.astype(int)
     cash_flow.columns = cash_flow.columns.astype(int)
 
-    income_statement = process_is(income_statement, cash_flow, growth_rates, yrs_to_predict)
-    balance_sheet, cash_flow = process_bs(income_statement, balance_sheet, cash_flow, yrs_to_predict)
+    income_statement, cash_flow = process_is(income_statement, cash_flow, growth_rates,
+                                             yrs_to_predict)
+    balance_sheet, cash_flow = process_bs(income_statement, balance_sheet, cash_flow,
+                                          yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
     wb = openpyxl.Workbook()
@@ -838,9 +888,9 @@ def main():
         wb[BS].append(r)
     for r in dataframe_to_rows(cash_flow):
         wb[CF].append(r)
-    style_is(wb[IS], IS)
-    style_is(wb[BS], BS)
-    style_is(wb[CF], CF)
+    style_ws(wb[IS], IS, income_statement, balance_sheet, cash_flow, fye)
+    style_ws(wb[BS], BS, income_statement, balance_sheet, cash_flow, fye)
+    style_ws(wb[CF], CF, income_statement, balance_sheet, cash_flow, fye)
     wb.save("output.xlsx")
 
 if __name__ == "__main__":
