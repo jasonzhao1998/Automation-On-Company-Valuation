@@ -14,12 +14,18 @@ BS = "Balance Sheet"
 CF = "Cashflow Statement"
 
 """
+TODO:
+    Duplicate: let other funds remain. Change other duplicates
+
 IMPLEMENTATION:
     Get name of company from dataset.
     Change SUM algorithm.
 """
 def empty_unmodified(df, yrs_to_predict):
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
+    for i, j in enumerate(unmodified):
+        if j:
+            print(unmodified.index[i])
     df.loc[unmodified, :] = np.nan
     df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
 
@@ -85,6 +91,10 @@ def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_exclude
 
 def fixed_extend(df, row_label, how, yrs):
     """Predicts the corresponding row of data only using data from current row."""
+    if not row_label:
+        print("Empty row_label in fixed_extend")
+        return
+
     if how is "prev":
         df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
     elif how is "avg":
@@ -138,6 +148,10 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
     if type(row_mask) is int:
         return letter + str(3 + row_mask)
     else:
+        print(row_label)
+        print(df.index)
+        print(row_mask)
+        print('a', nearby_label)
         nearby_index = df.index.get_loc(nearby_label)
         matched_indices = [i for i, j in enumerate(row_mask) if j]
         distance_vals = [abs(nearby_index - i) for i in matched_indices]
@@ -187,6 +201,21 @@ def preprocess(df, filter_in=[]):
     df.columns = [
         '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
     ]
+
+    # FIXME duplicate problem
+    ignore = [searched_label(df.index, 'other funds')]
+    unique_dict = {}
+
+    duplicate = []
+    for idx, label in enumerate(df.index):
+        if label in ignore:
+            continue
+        elif label in unique_dict:
+            duplicate.append(idx)
+        elif True in list(pd.notna(df.iloc[idx])):
+            unique_dict[label] = True
+    df = df.iloc[[i for i in range(len(df.index)) if i not in duplicate], :]
+
     return df, fye
 
 
@@ -352,15 +381,15 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             excel_cell(is_df, diluted_share_outstanding,cur_yr)
         )
         if type(is_df.at[ebitda, cur_yr]) is 'str':
-            is_df.at[ebitda, cur_yr] = '={}+{}'.format(
-                excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
-            )
-        else:
             is_df.at[ebitda, cur_yr] = [
                 np.nan, '={}+{}'.format(
                     excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
                 )
             ]
+        else:
+            is_df.at[ebitda, cur_yr] = '={}+{}'.format(
+                excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
+            )
     empty_unmodified(is_df, yrs_to_predict)
 
     return is_df, cf_df
@@ -845,26 +874,29 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
                   border_bool=False)
 
 def main():
-    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+    income_statement = pd.read_excel("asset/Qualcomm Income Statement.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("asset/Qualcomm Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/Qualcomm Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
     cash_flow, fye = preprocess(cash_flow)
 
     # FIXME temporary slices of data
-    income_statement = income_statement[:21]
-    balance_sheet = balance_sheet[:31]
-    cash_flow = cash_flow[:26]
+    income_statement = income_statement[:30]
+    balance_sheet = balance_sheet[:36]
+    cash_flow = cash_flow[:30]
+    print(income_statement.loc['Pretax Income'])
 
-    # FIXME temporary filter in labels
+    # FIXME temporary filter in label
+    """
     filter_in(income_statement, [
         "sales", "cost of good sold", "gross income", "sg&a expense", "other expense",
         "ebit operating income", "nonoperating income net", "interest expense",
         "unusual expense", "income taxes", "dilute eps", "net income", "div per share", "ebitda"
     ])
+    """
 
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
