@@ -23,9 +23,6 @@ IMPLEMENTATION:
 """
 def empty_unmodified(df, yrs_to_predict):
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
-    for i, j in enumerate(unmodified):
-        if j:
-            print(unmodified.index[i])
     df.loc[unmodified, :] = np.nan
     df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
 
@@ -148,10 +145,6 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
     if type(row_mask) is int:
         return letter + str(3 + row_mask)
     else:
-        print(row_label)
-        print(df.index)
-        print(row_mask)
-        print('a', nearby_label)
         nearby_index = df.index.get_loc(nearby_label)
         matched_indices = [i for i, j in enumerate(row_mask) if j]
         distance_vals = [abs(nearby_index - i) for i in matched_indices]
@@ -182,6 +175,11 @@ def filter_in(df, filters):
     df.drop([label for label in df.index if label not in labels], inplace=True)
 
 
+def filter_out(df, filters):
+    labels = [searched_label(df.index, label) for label in filters]
+    df.drop([label for label in labels], inplace=True)
+
+
 def preprocess(df, filter_in=[]):
     # Reverse columns
     df = df.loc[:, ::-1]
@@ -202,7 +200,7 @@ def preprocess(df, filter_in=[]):
         '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
     ]
 
-    # FIXME duplicate problem
+    # Manage duplicate labels
     ignore = [searched_label(df.index, 'other funds')]
     unique_dict = {}
 
@@ -887,9 +885,8 @@ def main():
     income_statement = income_statement[:30]
     balance_sheet = balance_sheet[:36]
     cash_flow = cash_flow[:30]
-    print(income_statement.loc['Pretax Income'])
 
-    # FIXME temporary filter in label
+    # FIXME temporary filter in labels
     """
     filter_in(income_statement, [
         "sales", "cost of good sold", "gross income", "sg&a expense", "other expense",
@@ -897,6 +894,9 @@ def main():
         "unusual expense", "income taxes", "dilute eps", "net income", "div per share", "ebitda"
     ])
     """
+
+    # FIXME temporary filter out labels
+    filter_out(income_statement, ["pretax income"])
 
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
