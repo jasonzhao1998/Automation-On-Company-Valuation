@@ -872,19 +872,19 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
                   border_bool=False)
 
 def main():
-    income_statement = pd.read_excel("asset/Qualcomm Income Statement.xlsx", header=4,
+    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("asset/Qualcomm Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/Qualcomm Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
     cash_flow, fye = preprocess(cash_flow)
 
     # FIXME temporary slices of data
-    income_statement = income_statement[:30]
-    balance_sheet = balance_sheet[:36]
-    cash_flow = cash_flow[:30]
+    income_statement = income_statement[:22]
+    balance_sheet = balance_sheet[:33]
+    cash_flow = cash_flow[:27]
 
     # FIXME temporary filter in labels
     """
