@@ -18,6 +18,7 @@ TODO:
     Duplicate: let other funds remain. Change other duplicates
     Generalize SUM algorithm
     Gernalize variables that not each company has
+    No EBITDA case
 """
 
 def preprocess(df, filter_in=[]):
