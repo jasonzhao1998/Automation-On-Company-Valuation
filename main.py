@@ -3,7 +3,7 @@ import re
 import time
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
+from style import *
 import xlsxwriter
 import numpy as np
 import pandas as pd
@@ -15,171 +15,11 @@ CF = "Cashflow Statement"
 
 """
 TODO:
-    Slicing
-    Duplicate: let other funds remain. Change other duplicates
-
-IMPLEMENTATION:
     Get name of company from dataset.
-    Change SUM algorithm.
+    Duplicate: let other funds remain. Change other duplicates
+    Generalize SUM algorithm
+    Gernalize variables that not each company has
 """
-def empty_unmodified(df, yrs_to_predict):
-    unmodified = df.iloc[:, -yrs_to_predict] == '0'
-    df.loc[unmodified, :] = np.nan
-    df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
-
-
-def initialize_ratio_row(df, top_label, bot_label, new_label, nearby_label=None):
-    """Create a new label and set a fractional formula for initialization."""
-    df.loc[new_label] = [
-        '={}/{}'.format(excel_cell(df, top_label, col, nearby_label),
-                        excel_cell(df, bot_label, col))
-        for col in df.columns
-    ]
-
-
-def insert_before(df, new_df, label):
-    """Insert new DataFrame before the corresponding label row."""
-    index = list(df.index).index(searched_label(df.index, label))
-    return pd.concat([df.iloc[:index], new_df, df[index:]])
-
-
-def insert_after(df, new_df, label):
-    """Insert new DataFrame after the corresponding label row."""
-    index = list(df.index).index(searched_label(df.index, label))
-    return pd.concat([df.iloc[:index + 1], new_df, df[index + 1:]])
-
-
-def add_empty_row(df):
-    """Adds an empty row to the bottom of DataFrame."""
-    df.loc["null"] = np.nan
-    df.index = list(df.index)[:-1] + [np.nan]
-
-
-def add_yr_column(df):
-    """Appends one empty column representing year into DataFrame."""
-    cur_yr = str(df.columns[len(df.columns) - 1])
-    if cur_yr[-1] == 'E':
-        cur_yr = str(int(cur_yr[:-1]) + 1) + 'E'
-    else:
-        cur_yr = str(int(cur_yr) + 1) + 'E'
-    array = ['0' if i else np.nan for i in df.iloc[:,-1].notna().values]
-    df.insert(len(df.columns), cur_yr, array)
-
-
-def add_growth_rate_row(df, label, new_label):
-    df.loc[new_label] = [np.nan] + [
-        '={}/{}-1'.format(
-            excel_cell(df, label, df.columns[i + 1]), excel_cell(df, label, df.columns[i])
-        ) for i in range(len(df.columns) - 1)
-    ]
-
-
-def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_excluded=0):
-    formula = ""
-    if how is "round":
-        formula = "=ROUND(" + excel_cell(df, row_label, last_given_yr) + ',' + \
-                  str(ROUNDING_DIGIT) + ')'
-    elif how is "avg":
-        formula = "=AVERAGE(" + excel_cell(df, row_label, df.columns[0 + num_excluded]) + ':' + \
-                  excel_cell(df, row_label, last_given_yr) + ')'
-    df.loc[row_label].iloc[-yrs_to_predict] = formula
-    temp = excel_cell(df, row_label, df.columns[-yrs_to_predict])
-    df.loc[row_label].iloc[-yrs_to_predict + 1:] = '=' + temp
-
-
-def fixed_extend(df, row_label, how, yrs):
-    """Predicts the corresponding row of data only using data from current row."""
-    if not row_label:
-        print("Empty row_label in fixed_extend")
-        return
-
-    if how is "prev":
-        df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
-    elif how is "avg":
-        mean = df.loc[row_label].iloc[:-yrs].mean(axis=0)
-        df.at[row_label, df.columns[-yrs]] = mean
-    elif how is "mix":
-        mean = df.loc[row_label].iloc[:-3].mean(axis=0)
-        if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
-            df.at[row_label, df.columns[-1]] = df.loc[row_label].iloc[:-1].mean(axis=0)
-        else:
-            df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
-    elif how is "zero":
-        df.at[row_label, df.columns[-yrs:]] = 0
-    else:
-        print("ERROR: fixed_extend")
-        exit(1)
-
-
-def eval_formula(df, formula):
-    """Evaluates an excel formula of a dataframe.
-    The mathematical operations must decrease in priority from left to right."""
-    ans = 0
-    cells = re.findall(r"[A-Z][0-9]*", formula)
-    ops = ['+'] + re.findall(r"[+|-|*|/|]", formula)
-    
-    for i in range(len(cells)):
-        row = int(cells[i][1:]) - 2
-        col = ord(cells[i][0]) - ord('A') - 1
-        if ops[i] is '+':
-            ans += df.iat[row, col]
-        elif ops[i] is '-':
-            ans -= df.iat[row, col]
-        elif ops[i] is '*':
-            ans *= df.iat[row, col]
-        elif ops[i] is '/':
-            ans /= df.iat[row, col]
-        else:
-            print("ERROR: Invalid operator symbol")
-            exit(1)
-    return ans
-
-
-def excel_cell(df, row_label, col_label, nearby_label=None):
-    """Returns corresponding excel cell position given row label and column label. 
-    Note that if there are more than 26 columns, this function does not work properly."""
-    if not row_label:
-        print("ERROR: excel_cell")
-        exit(1)
-    letter = chr(ord('A') + df.columns.get_loc(col_label) + 2)
-    row_mask = df.index.get_loc(row_label)
-    if type(row_mask) is int:
-        return letter + str(3 + row_mask)
-    else:
-        nearby_index = df.index.get_loc(nearby_label)
-        matched_indices = [i for i, j in enumerate(row_mask) if j]
-        distance_vals = [abs(nearby_index - i) for i in matched_indices]
-        return letter + str(3 + matched_indices[distance_vals.index(min(distance_vals))])
-
-
-def searched_label(labels, target):
-    """Returns target label from a list of DataFrame labels."""
-    score_dict = {label: 0 for label in labels}
-
-    for word in target.split():
-        for label in set(labels):
-            if word.lower() in str(label).lower():
-                score_dict[label] += 1
-
-    if sum(score_dict.values()) == 0:
-        return ""
-    def compare(pair):
-        if type(pair[0]) is str:
-            return len(pair[0])
-        return 0
-    return max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
-
-
-def filter_in(df, filters):
-    labels = [searched_label(df.index, label) for label in filters] + \
-             list(df[df.iloc[:, 1].isna()].index)
-    df.drop([label for label in df.index if label not in labels], inplace=True)
-
-
-def filter_out(df, filters):
-    labels = [searched_label(df.index, label) for label in filters]
-    df.drop([label for label in labels], inplace=True)
-
 
 def preprocess(df, filter_in=[]):
     # Reverse columns
@@ -361,9 +201,9 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         is_df.at[sgna, cur_yr] = '={}*{}'.format(
             excel_cell(is_df, sales, cur_yr), excel_cell(is_df, sgna_ratio, cur_yr)
         )
-        is_df.at[ebit, cur_yr] = '={}-{}-{}'.format(
-            excel_cell(is_df, gross_income, cur_yr), excel_cell(is_df, sgna, cur_yr),
-            excel_cell(is_df, other_expense, cur_yr)
+        is_df.at[ebit, cur_yr] = '={}-{}'.format(
+            excel_cell(is_df, gross_income, cur_yr),
+            sum_formula(is_df, ebit, cur_yr, gross_income, 1)
         )
         is_df.at[unusual, cur_yr] = '={}*{}'.format(
             excel_cell(is_df, ebit, cur_yr), excel_cell(is_df, unusual_ratio, cur_yr)
@@ -582,29 +422,26 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(bs_df, other_cur_liabilities, prev_yr),
             excel_cell(bs_df, misc_cur_liabilities_growth, cur_yr)
         )
-
-        # FIXME sum positions may not be correct
-        bs_df.at[total_cur_assets, cur_yr] = '=SUM({}:{})'.format(
-            excel_cell(bs_df, cash_st_investments, cur_yr),
-            excel_cell(bs_df, other_cur_assets, cur_yr)
-        )
-        bs_df.at[total_assets, cur_yr] = '={}+SUM({}:{})'.format(
-            excel_cell(bs_df, total_cur_assets, cur_yr),
-            excel_cell(bs_df, net_property_plant_equipment, cur_yr),
-            excel_cell(bs_df, other_assets, cur_yr)
-        )
-        bs_df.at[total_cur_liabilities, cur_yr] = '=SUM({}:{})'.format(
-            excel_cell(bs_df, st_debt_n_cur_portion_lt_debt, cur_yr),
-            excel_cell(bs_df, other_cur_liabilities, cur_yr)
-        )
-        bs_df.at[total_liabilities, cur_yr] = '={}+SUM({}:{})'.format(
-            excel_cell(bs_df, total_cur_liabilities, cur_yr),
-            excel_cell(bs_df, lt_debt, cur_yr), excel_cell(bs_df, other_liabilities, cur_yr)
-        )
         bs_df.at[total_shareholder_equity, cur_yr] = "={}+'{}'!{}+'{}'!{}+'{}'!{}".format(
             excel_cell(bs_df, total_shareholder_equity, prev_yr), CF,
             excel_cell(cf_df, change_in_capital_stock, cur_yr), IS,
             excel_cell(is_df, net_income, cur_yr), CF, excel_cell(cf_df, cash_div_paid, cur_yr)
+        )
+
+        # Sums
+        bs_df.at[total_cur_assets, cur_yr] = '=' + sum_formula(
+            bs_df, total_cur_assets, cur_yr
+        )
+        bs_df.at[total_assets, cur_yr] = '={}+{}'.format(
+            excel_cell(bs_df, total_cur_assets, cur_yr),
+            sum_formula(bs_df, total_assets, cur_yr)
+        )
+        bs_df.at[total_cur_liabilities, cur_yr] = '=' + sum_formula(
+            bs_df, total_cur_liabilities, cur_yr
+        )
+        bs_df.at[total_liabilities, cur_yr] = '={}+{}'.format(
+            excel_cell(bs_df, total_cur_liabilities, cur_yr),
+            sum_formula(bs_df, total_liabilities, cur_yr)
         )
 
     empty_unmodified(bs_df, yrs_to_predict)
@@ -702,18 +539,12 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
     # Calculate net investing CF
     cf_df.loc[net_investing_cf] = [
-        '=SUM({}:{})'.format(
-            excel_cell(cf_df, capital_expenditures, yr),
-            excel_cell(cf_df, other_funds, yr, nearby_label=net_investing_cf)
-        ) for yr in cf_df.columns
+        '=' + sum_formula(cf_df, net_investing_cf, yr) for yr in cf_df.columns
     ]
 
     # Calcualate net financing CF
     cf_df.loc[net_financing_cf] = [
-        '=SUM({}:{})'.format(
-            excel_cell(cf_df, cash_div_paid, yr),
-            excel_cell(cf_df, other_funds, yr, nearby_label=net_financing_cf)
-        ) for yr in cf_df.columns
+        '=' + sum_formula(cf_df, net_financing_cf, yr) for yr in cf_df.columns
     ]
 
     # Calculate net change in cash
@@ -736,9 +567,8 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
             IS, excel_cell(is_df, deprec_amort_expense, cur_yr)
         )
 
-        cf_df.at[funds_from_operations, cur_yr] = "=SUM({}:{})".format(
-            excel_cell(cf_df, net_income_cf, cur_yr),
-            excel_cell(cf_df, other_funds, cur_yr, nearby_label=net_operating_cf)
+        cf_df.at[funds_from_operations, cur_yr] = '=' + sum_formula(
+            cf_df, funds_from_operations, cur_yr
         )
 
         cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{})-SUM('{}'!{}:{})".format(
@@ -770,113 +600,12 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     return cf_df
 
 
-def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border(),
-                alignment=Alignment()):
-    letter1, num1 = start[0], start[1:]
-    letter2, num2 = end[0], end[1:]
-    if letter1 == letter2:  # column
-        for i in range(int(num1), int(num2) + 1):
-            ws[letter1 + str(i)].font = font
-            ws[letter1 + str(i)].fill = fill
-            ws[letter1 + str(i)].border = border
-            ws[letter1 + str(i)].alignment = alignment
-    elif num1 == num2:  # row
-        for i in range(ord(letter2) - ord(letter1) + 1):
-            ws[chr(ord(letter1) + i) + num1].font = font
-            ws[chr(ord(letter1) + i) + num1].fill = fill
-            ws[chr(ord(letter1) + i) + num1].border = border
-            ws[chr(ord(letter1) + i) + num1].alignment = alignment
-    else:
-        print("ERROR: style_range")
-        exit(1)
-
-
-def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
-    border = Side(border_style="thin", color="000000")
-
-    # Insert empty column to beginning
-    ws.insert_cols(1)
-
-    letter, num = ws.dimensions.split(':')[1][0], ws.dimensions.split(':')[1][1:]
-
-    ws.sheet_view.showGridLines = False  # No grid lines
-    ws.move_range('C1:' + letter + '1', rows=4)  # Move year row down
-    ws.column_dimensions['B'].width = 50  # Change width of labels
-
-    ws['B2'] = sheet_name
-    ws['B2'].font = Font(bold=True)
-    ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
-    ws['B3'] = "($ in millions of U.S. Dollar)"
-    ws['B3'].font = Font(italic=True)
-    style_range(ws, 'B3', letter + '3', fill=PatternFill(fill_type='solid', fgColor='bababa'))
-
-    # Central element Annual
-    ws[chr((ord('C') + ord(letter)) // 2) + '3'] = "Annual"
-    ws[chr((ord('C') + ord(letter)) // 2) + '3'].font = Font(bold=True)
-    ws[chr((ord('C') + ord(letter)) // 2) + '4'] = "FYE " + fye
-
-    # Year row style
-    style_range(ws, 'C5', letter + '5', font=Font(bold=True, underline="single"),
-                border=Border(top=border, bottom=border),
-                alignment=Alignment(horizontal="center", vertical="center"))
-
-    # Label column
-    style_range(ws, 'B7', 'B' + num, fill=PatternFill(fill_type='solid', fgColor='dddddd'))
-
-    # Style sum rows
-    for cell in [letter + str(i + 1) for i in range(int(num) - 1)]:
-        if type(ws[cell].value) is str and 'SUM' in ws[cell].value and len(ws[cell].value) < 30:
-            num = cell[1:]
-            ws['B' + num].font = Font(bold=True)
-            style_range(ws, 'C' + num, letter + num, font=Font(bold=True),
-                        border=Border(top=border))
-
-    # Style specific rows
-    def style_row(ws, label, sheet_name, is_df, bs_df, cf_df, border_bool=True, bold_bool=True,
-                  underline=None):
-        df = None
-        num = 0
-        if sheet_name == IS:
-            num = str(int(excel_cell(is_df, searched_label(is_df.index, label),
-                                     is_df.columns[0])[1:]))
-        elif sheet_name == BS:
-            num = str(int(excel_cell(bs_df, searched_label(bs_df.index, label),
-                                     bs_df.columns[0])[1:]))
-        elif sheet_name == CF:
-            num = str(int(excel_cell(cf_df, searched_label(cf_df.index, label),
-                                     cf_df.columns[0])[1:]))
-        ws['B' + num].font = Font(bold=True, underline=underline)
-        border_style = Border(top=border) if border_bool else Border()
-        bold_style = Font(bold=True) if bold_bool else Font()
-        style_range(ws, 'C' + num, letter + num, font=bold_style, border=border_style)
-
-    if sheet_name == IS:
-        style_row(ws, "total sales", IS, is_df, bs_df, cf_df, False)
-        style_row(ws, "gross income", IS, is_df, bs_df, cf_df)
-        style_row(ws, "ebit operating income", IS, is_df, bs_df, cf_df)
-        style_row(ws, "ebit operating income", IS, is_df, bs_df, cf_df)
-        style_row(ws, "pretax income", IS, is_df, bs_df, cf_df)
-        style_row(ws, "net income", IS, is_df, bs_df, cf_df)
-        style_row(ws, "driver ratio", IS, is_df, bs_df, cf_df, underline="single",
-                  border_bool=False)
-    elif sheet_name == BS:
-        style_row(ws, "total shareholder equity", BS, is_df, bs_df, cf_df, bold_bool=False,
-                  border_bool=False)
-        style_row(ws, "total liabilit shareholder equity", BS, is_df, bs_df, cf_df,
-                  border_bool=False)
-        style_row(ws, "driver ratio", BS, is_df, bs_df, cf_df, underline="single",
-                  border_bool=False)
-    elif sheet_name == CF:
-        style_row(ws, "net operating cash flow cf", CF, is_df, bs_df, cf_df)
-        style_row(ws, "cash balance", CF, is_df, bs_df, cf_df, border_bool=False)
-        style_row(ws, "driver ratio", CF, is_df, bs_df, cf_df, underline="single",
-                  border_bool=False)
-
 def main():
-    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+	# Read three sheets
+    income_statement = pd.read_excel("asset/Qualcomm Income Statement.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("asset/Qualcomm Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/Qualcomm Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
@@ -901,18 +630,6 @@ def main():
     else:
         cash_flow = cash_flow[:np.where(cf_search)[-1][-1] + 1]
 
-    # FIXME temporary filter in labels
-    """
-    filter_in(income_statement, [
-        "sales", "cost of good sold", "gross income", "sg&a expense", "other expense",
-        "ebit operating income", "nonoperating income net", "interest expense",
-        "unusual expense", "income taxes", "dilute eps", "net income", "div per share", "ebitda"
-    ])
-    """
-
-    # FIXME temporary filter out labels
-    filter_out(income_statement, ["pretax income"])
-
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
@@ -928,6 +645,7 @@ def main():
                                           yrs_to_predict)
     cash_flow = process_cf(income_statement, balance_sheet, cash_flow, yrs_to_predict)
 
+    # Stylize excel sheets and output excel
     wb = openpyxl.Workbook()
     wb['Sheet'].title = IS
     wb.create_sheet(BS)
