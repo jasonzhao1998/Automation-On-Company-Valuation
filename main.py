@@ -8,7 +8,6 @@ import xlsxwriter
 import numpy as np
 import pandas as pd
 
-ROUNDING_DIGIT = 4
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
