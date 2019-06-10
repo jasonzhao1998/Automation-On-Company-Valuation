@@ -15,6 +15,7 @@ CF = "Cashflow Statement"
 
 """
 TODO:
+    Slicing
     Duplicate: let other funds remain. Change other duplicates
 
 IMPLEMENTATION:
@@ -881,10 +882,24 @@ def main():
     balance_sheet, _ = preprocess(balance_sheet)
     cash_flow, fye = preprocess(cash_flow)
 
-    # FIXME temporary slices of data
-    income_statement = income_statement[:22]
-    balance_sheet = balance_sheet[:33]
-    cash_flow = cash_flow[:27]
+    # Slices of data
+    is_search = income_statement.index.get_loc(searched_label(income_statement.index, "EBITDA"))
+    if type(is_search) == int:
+        income_statement = income_statement[:is_search + 1]
+    else:
+        income_statement = income_statement[:np.where(is_search)[-1][-1] + 1]
+    bs_search = balance_sheet.index.get_loc(searched_label(
+        balance_sheet.index, "total liabilities & shareholder equity")
+    )
+    if type(bs_search) == int:
+        balance_sheet = balance_sheet[:bs_search + 1]
+    else:
+        balance_sheet = balance_sheet[:np.where(bs_search)[-1][-1] + 1]
+    cf_search = cash_flow.index.get_loc(searched_label(cash_flow.index, "net change in cash"))
+    if type(cf_search) == int:
+        cash_flow = cash_flow[:cf_search + 1]
+    else:
+        cash_flow = cash_flow[:np.where(cf_search)[-1][-1] + 1]
 
     # FIXME temporary filter in labels
     """
