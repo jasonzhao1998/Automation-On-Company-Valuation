@@ -14,9 +14,8 @@ t_m = 0.25 #marginal tax rate
 d_e = 0.00 #need to calculate
 
 def cost_of_debt():
-	rating = raw_input("Please provide the bond rating for the firm: ")
+	rating = input("Please provide the bond rating for the firm: ")
 	default_spread = 0.00
-	print rating
 	if rating == "D2" or rating == "D":
 		default_spread = 0.1938
 	elif rating == "C2" or rating == "C":
@@ -48,7 +47,7 @@ def cost_of_debt():
 	elif rating == "Aaa" or rating == "AAA":
 		default_spread = 0.0075
 	cod = (us_10y_treasury_bond + default_spread) * (1 - t_m)
-	print "cost of debt:", round(cod * 100, 2), "%"
+	print ("cost of debt:", round(cod * 100, 2), "%")
 	return cod
 
 
@@ -72,22 +71,22 @@ def wacc():
     #mkt value calculation
     debt_sum = pd.read_excel('NVIDIA/NVIDIA Debt Summary.xlsx', header=4, index_col=0, na_filter=False)
     mkt_debt = round(debt_sum['Mkt Val  (MM)'].T.sum() / 2, 4)
-    print "mkt_debt:", mkt_debt
+    print ("mkt_debt:", mkt_debt)
     bs = pd.read_excel('NVIDIA/NVIDIA Mkt Cap.xlsx', header=2, index_col=0, usecols = "A:C")
     mkt_equity = round(bs.loc['Common Stock', 'Mkt Cap'], 4)
-    print "mkt_equity:", mkt_equity
+    print ("mkt_equity:", mkt_equity)
     d_e = (mkt_debt / (mkt_debt + mkt_equity)) #operating leases include
-    print "d/e ratio:", round(d_e * 100, 2), "%"
+    print ("d/e ratio:", round(d_e * 100, 2), "%")
 
     #beta calculation
     beta = pd.read_excel('asset/BETAS.xls', header=9, index_col=0, na_filter=False)
     unlevered_beta = beta.loc['Semiconductor Equip', 'Unlevered beta corrected for cash']  # should be extracted from beta.xlsx
     levered_beta = unlevered_beta * (1 + (1 - t_m) * d_e)
-    print "beta:", round(levered_beta, 2)
+    print ("beta:", round(levered_beta, 2))
 
     #capm calculation
     e_return = us_10y_treasury_bond + levered_beta * us_imp
-    print "cost of equity:", round(e_return * 100, 2), "%"
+    print ("cost of equity:", round(e_return * 100, 2), "%")
 
     #wacc calculation
     wacc = e_return * (1 - d_e) + cost_of_debt() * d_e
@@ -95,7 +94,12 @@ def wacc():
     return wacc
    
 
-print "wacc:", round(wacc() * 100, 2), "%"
+def main():
+   	cost_of_capital = wacc()
+   	print ("wacc:", round(cost_of_capital * 100, 2), "%")
+
+if __name__ == "__main__":
+	main()
 
 
 
