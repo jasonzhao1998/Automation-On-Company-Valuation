@@ -32,12 +32,15 @@ def searched_label(labels, target):
                 score_dict[label] += 1
 
     if sum(score_dict.values()) == 0:
-        return ""
+        return None
     def compare(pair):
         if type(pair[0]) is str:
             return len(pair[0])
         return 0
-    return max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
+    result = max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
+    for word in target.split():
+        pass
+    return result
 
 
 def empty_unmodified(df, yrs_to_predict):
