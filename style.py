@@ -6,7 +6,7 @@ from helper import excel_cell, searched_label
 
 def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border(),
                 alignment=Alignment(), percentage=False, currency=False):
-    """Change excel style for a column or row."""
+    """Changes excel style for a column or row."""
     letter1, num1 = start[0], start[1:]
     letter2, num2 = end[0], end[1:]
     if letter1 == letter2:  # column
@@ -37,7 +37,7 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
 
 
 def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
-    """Change excel style for a worksheet."""
+    """Changes excel style for a worksheet."""
     if sheet_name == "Income Statement":
         cur_df = is_df
     elif sheet_name == "Balance Sheet":
@@ -47,7 +47,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
 
     border = Side(border_style="thin", color="000000")
 
-    # Insert empty column to beginning
+    # Inserts empty column to beginning
     ws.insert_cols(1)
 
     letter, num = ws.dimensions.split(':')[1][0], ws.dimensions.split(':')[1][1:]
@@ -76,7 +76,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
     # Label column
     style_range(ws, 'B7', 'B' + num, fill=PatternFill(fill_type='solid', fgColor='dddddd'))
 
-    # Style sum rows
+    # Styles sum rows
     for cell in [letter + str(i + 1) for i in range(int(num) - 1)]:
         if isinstance(ws[cell].value, str) and 'SUM' in ws[cell].value and len(ws[cell].value) < 30:
             num = cell[1:]
@@ -84,7 +84,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
             style_range(ws, 'C' + num, letter + num, font=Font(bold=True),
                         border=Border(top=border), currency=True)
 
-    # Style specific rows
+    # Styles specific rows
     def style_row(ws, label, df, border_bool=True, bold_bool=True,
                   underline=None, currency=False):
         num = str(int(excel_cell(df, searched_label(df.index, label), df.columns[0])[1:]))

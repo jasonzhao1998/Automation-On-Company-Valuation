@@ -1,6 +1,7 @@
+"""Implementation for helper functions."""
+import string
 import pandas as pd
 import numpy as np
-import string
 
 
 ROUNDING_DIGIT = 4
@@ -8,13 +9,13 @@ PUNCTUATION = string.punctuation.replace('&', '').replace('-', '').replace('/', 
 
 
 def excel_cell(df, row_label, col_label, nearby_label=None):
-    """Returns corresponding excel cell position given row label and column label. 
+    """Returns corresponding excel cell position given row label and column label.
     Note that if there are more than 26 columns, this function does not work properly."""
     if not row_label:
         assert("ERROR: excel_cell")
     letter = chr(ord('A') + df.columns.get_loc(col_label) + 2)
     row_mask = df.index.get_loc(row_label)
-    if type(row_mask) is int:
+    if isinstance(row_mask, int):
         return letter + str(3 + row_mask)
     else:
         nearby_index = df.index.get_loc(nearby_label)
@@ -29,17 +30,21 @@ def searched_label(labels, target):
     target = target.lower()
 
     for label in set(labels):
-        for word in "".join(['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(label).lower()]).split():
+        for word in "".join(
+            ['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(label).lower()]
+        ).split():
             if word == target:
                 score_dict[label] += 2
             elif word in target:
                 score_dict[label] += 1
     if sum(score_dict.values()) == 0:
         return None
+
     def compare(pair):
-        if type(pair[0]) is str:
+        if isinstance(pair[0], str):
             return len(pair[0])
         return 0
+
     result = max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
     miss = 0
     for word in "".join(['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(result).lower()]).split():
@@ -51,6 +56,7 @@ def searched_label(labels, target):
 
 
 def empty_unmodified(df, yrs_to_predict):
+    """Removes the unmodified rows from a DataFrame."""
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
     df.loc[unmodified, :] = np.nan
     df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
@@ -90,11 +96,12 @@ def add_yr_column(df):
         cur_yr = str(int(cur_yr[:-1]) + 1) + 'E'
     else:
         cur_yr = str(int(cur_yr) + 1) + 'E'
-    array = ['0' if i else np.nan for i in df.iloc[:,-1].notna().values]
+    array = ['0' if i else np.nan for i in df.iloc[:, -1].notna().values]
     df.insert(len(df.columns), cur_yr, array)
 
 
 def add_growth_rate_row(df, label, new_label):
+    """Appends growth rate ratios to the bottom of DataFrame."""
     df.loc[new_label] = [np.nan] + [
         '={}/{}-1'.format(
             excel_cell(df, label, df.columns[i + 1]), excel_cell(df, label, df.columns[i])
@@ -103,10 +110,11 @@ def add_growth_rate_row(df, label, new_label):
 
 
 def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_excluded=0):
-    if how is "round":
+    """Writes formulas for driver rows."""
+    if how == "round":
         formula = "=ROUND(" + excel_cell(df, row_label, last_given_yr) + ',' + \
                   str(ROUNDING_DIGIT) + ')'
-    elif how is "avg":
+    elif how == "avg":
         formula = "=AVERAGE(" + excel_cell(df, row_label, df.columns[0 + num_excluded]) + ':' + \
                   excel_cell(df, row_label, last_given_yr) + ')'
     df.loc[row_label].iloc[-yrs_to_predict] = formula
@@ -119,18 +127,18 @@ def fixed_extend(df, row_label, how, yrs):
     if not row_label:
         print("Empty row_label in fixed_extend")
         return
-    if how is "prev":
+    if how == "prev":
         df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
-    elif how is "avg":
+    elif how == "avg":
         mean = df.loc[row_label].iloc[:-yrs].mean(axis=0)
         df.at[row_label, df.columns[-yrs]] = mean
-    elif how is "mix":
+    elif how == "mix":
         mean = df.loc[row_label].iloc[:-3].mean(axis=0)
         if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
             df.at[row_label, df.columns[-1]] = df.loc[row_label].iloc[:-1].mean(axis=0)
         else:
             df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
-    elif how is "zero":
+    elif how == "zero":
         df.at[row_label, df.columns[-yrs:]] = 0
     else:
         print("ERROR: fixed_extend")
@@ -138,6 +146,7 @@ def fixed_extend(df, row_label, how, yrs):
 
 
 def sum_formula(df, row_label, col_label, start_label=None, offset=0):
+    """Generalizes the sum procedure."""
     end_label = df.loc[:row_label].index[-2]
 
     if start_label:
@@ -148,6 +157,7 @@ def sum_formula(df, row_label, col_label, start_label=None, offset=0):
                 start_label = df.index[i + 1]
                 break
     formula = 'SUM({}:{})'.format(
-        excel_cell(df, start_label, col_label, row_label), excel_cell(df, end_label, col_label, row_label)
+        excel_cell(df, start_label, col_label, row_label),
+        excel_cell(df, end_label, col_label, row_label)
     )
     return formula

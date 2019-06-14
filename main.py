@@ -1,13 +1,10 @@
-import os
-import re
-import time
-import string
+"""Main program's implementation."""
 import openpyxl
-from openpyxl.utils.dataframe import dataframe_to_rows
-from style import *
-import xlsxwriter
 import numpy as np
 import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
+from style import style_ws
+from helper import *
 
 IS = "Income Statement"
 BS = "Balance Sheet"
@@ -21,7 +18,9 @@ TODO:
     Market cap dividens per share
 """
 
-def preprocess(df, filter_in=[]):
+
+def preprocess(df):
+    """Data cleaning."""
     # Reverse columns
     df = df.loc[:, ::-1]
 
@@ -59,8 +58,8 @@ def preprocess(df, filter_in=[]):
 
 
 def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
+    """Manipulates income statement."""
     # Short-hands
-    first_yr = is_df.columns[0]
     last_given_yr = is_df.columns[-1]
 
     # Insert 4 empty rows
@@ -106,7 +105,9 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     dna_expense_df = pd.DataFrame(
         {
             yr: "='{}'!".format(CF) + excel_cell(
-                cf_df, searched_label(cf_df.index, "depreciation depletion & amortization expense"), yr
+                cf_df,
+                searched_label(cf_df.index, "depreciation depletion & amortization expense"),
+                yr
             ) for yr in is_df.columns
         }, index=["Depreciation & Amortization Expense"]
     )
@@ -182,7 +183,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
 
     for i in range(yrs_to_predict):
         cur_yr = is_df.columns[-yrs_to_predict + i]
-        prev_yr = is_df.columns[-yrs_to_predict + i - 1]    
+        prev_yr = is_df.columns[-yrs_to_predict + i - 1]
 
         # Write formulas
         is_df.at[sales, cur_yr] = '={}*(1+{})'.format(
@@ -216,10 +217,10 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
         )
         is_df.at[diluted_eps, cur_yr] = '={}/{}'.format(
             excel_cell(is_df, net_income, cur_yr),
-            excel_cell(is_df, diluted_share_outstanding,cur_yr)
+            excel_cell(is_df, diluted_share_outstanding, cur_yr)
         )
 
-        if type(is_df.at[ebitda, cur_yr]) is 'str':  # two rows with label EBITDA frequently
+        if isinstance(is_df.at[ebitda, cur_yr], str):  # two rows with label EBITDA frequently
             is_df.at[ebitda, cur_yr] = '={}+{}'.format(
                 excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
             )
@@ -235,8 +236,8 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
 
 
 def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
+    """Manipulates balance sheet."""
     # Short-hands
-    first_yr = bs_df.columns[0]
     last_given_yr = bs_df.columns[-1]
 
     # Insert 4 empty rows
@@ -251,20 +252,10 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     other_cur_assets = searched_label(bs_df.index, "other current asset")
     total_cur_assets = searched_label(bs_df.index, "total current asset")
     net_property_plant_equipment = searched_label(bs_df.index, "net property plant equipment")
-    total_investments_n_advances = searched_label(bs_df.index, "total investment and advances")
-    intangible_assets = searched_label(bs_df.index, "intangible assets")
-    deferred_tax_assets = searched_label(bs_df.index, "deferred tax assets")
-    other_assets = searched_label(bs_df.index, "other assets")
     total_assets = searched_label(bs_df.index, "total assets")
-    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "debt st lt curr portion")
     accounts_payable = searched_label(bs_df.index, "accounts payable")
-    income_tax_payable = searched_label(bs_df.index, "income tax payable")
     other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
     total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
-    lt_debt = searched_label(bs_df.index, "long term debt")
-    provision_for_risks_n_charges = searched_label(bs_df.index, "provision for risks charges")
-    deferred_tax_liabilities = searched_label(bs_df.index, "deferred tax liabilities")
-    other_liabilities = searched_label(bs_df.index, "other liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
     total_shareholder_equity = searched_label(bs_df.index, "total shareholders equity")
     total_liabilities_n_shareholders_equity = searched_label(
@@ -277,7 +268,8 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     net_income = searched_label(is_df.index, "net income")
 
     # Cash flow statement labels
-    deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization expense") 
+    deprec_deplet_n_amort = searched_label(cf_df.index,
+                                           "depreciation depletion amortization expense")
     capital_expenditures = searched_label(cf_df.index, "capital expenditures")
     cash_div_paid = searched_label(cf_df.index, "cash dividends paid")
     change_in_capital_stock = searched_label(cf_df.index, "change in capital stock")
@@ -322,7 +314,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     add_empty_row(cf_df)
     cf_df.loc["Driver Ratios"] = np.nan
     # Capital Expenditure Revenue Ratio
-    cf_df.loc["Capital Expenditure Revenue Ratio"]  = [
+    cf_df.loc["Capital Expenditure Revenue Ratio"] = [
         "=-{}/'{}'!{}".format(
             excel_cell(cf_df, capital_expenditures, yr), IS, excel_cell(is_df, sales, yr)
         ) for yr in cf_df.columns
@@ -347,7 +339,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     wk_df = pd.DataFrame(
         {
             yr: ['={}-{}'.format(
-                excel_cell(bs_df, total_cur_assets, yr), 
+                excel_cell(bs_df, total_cur_assets, yr),
                 excel_cell(bs_df, total_cur_liabilities, yr)
             ), np.nan] for yr in bs_df.columns
         }, index=["Working Capital", np.nan]
@@ -358,7 +350,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     balance_df = pd.DataFrame(
         {
             yr: ['={}-{}'.format(
-                excel_cell(bs_df, total_assets, yr), 
+                excel_cell(bs_df, total_assets, yr),
                 excel_cell(bs_df, total_liabilities_n_shareholders_equity, yr)
             ), np.nan] for yr in bs_df.columns
         }, index=["Balance", np.nan]
@@ -367,7 +359,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
 
     # Calculate driver ratios
     bs_df.loc[dso].iloc[-yrs_to_predict:] = '=' + excel_cell(
-        bs_df,dso, bs_df.columns[-yrs_to_predict - 2]
+        bs_df, dso, bs_df.columns[-yrs_to_predict - 2]
     )
     driver_extend(bs_df, dpo, "avg", last_given_yr, yrs_to_predict)
     driver_extend(bs_df, other_cur_assets_growth, "avg", last_given_yr, yrs_to_predict)
@@ -384,7 +376,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
 
     for i in range(yrs_to_predict):
         cur_yr = bs_df.columns[-yrs_to_predict + i]
-        prev_yr = bs_df.columns[-yrs_to_predict + i - 1] 
+        prev_yr = bs_df.columns[-yrs_to_predict + i - 1]
 
         # Calculate variables
         bs_df.at[cash_st_investments, cur_yr] = "='{}'!{}".format(
@@ -431,8 +423,9 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             sum_formula(bs_df, total_liabilities, cur_yr)
         )
 
-    for label in bs_df.index:
-        if pd.notna(label) and pd.notna(bs_df.loc[label].iloc[0]) and bs_df.loc[label].iloc[-1] == '0':
+    for label in bs_df.index[:bs_df.index.get_loc(total_liabilities)]:
+        if pd.notna(label) and pd.notna(bs_df.loc[label].iloc[0]) \
+                           and bs_df.loc[label].iloc[-1] == '0':
             fixed_extend(bs_df, label, 'prev', yrs_to_predict)
 
     empty_unmodified(bs_df, yrs_to_predict)
@@ -441,8 +434,8 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
 
 
 def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
+    """Manipulates cash flow statement."""
     # Short-hands
-    first_yr = cf_df.columns[0]
     last_given_yr = cf_df.columns[-yrs_to_predict-1]
 
     # Cash flow statement labels
@@ -455,7 +448,8 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     net_operating_cf = searched_label(cf_df.index, "net operating cash flow")
     capital_expenditures = searched_label(cf_df.index, "capital expenditures")
     net_asset_acquisition = searched_label(cf_df.index, "net assets from acquisiton")
-    fixed_assets_n_businesses_sale = searched_label(cf_df.index, "fixed assets & of sale businesses")
+    fixed_assets_n_businesses_sale = searched_label(cf_df.index,
+                                                    "fixed assets & of sale businesses")
     purchase_sale_of_investments = searched_label(cf_df.index, "purchasesale of investments")
     net_investing_cf = searched_label(cf_df.index, "net investing cash flow")
     cash_div_paid = searched_label(cf_df.index, "cash dividends paid")
@@ -463,7 +457,6 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     net_inssuance_reduction_of_debt = searched_label(cf_df.index, "net issuance reduction of debt")
     net_financing_cf = searched_label(cf_df.index, "net financing cash flow")
     net_change_in_cash = searched_label(cf_df.index, "net change in cash")
-    cash_balance = searched_label(cf_df.index, "cash balance")
     capex_ratio = "Capital Expenditure Revenue Ratio"
     other_funds_net_operating_ratio = "Other Funds Net Operating CF Ratio"
 
@@ -479,10 +472,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
     cash_st_investments = searched_label(bs_df.index, "cash short term investments")
     st_receivables = searched_label(bs_df.index, "short term receivables")
-    total_cur_assets = searched_label(bs_df.index, "total current assets")
-    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "st debt curr portion lt")
     accounts_payable = searched_label(bs_df.index, "accounts payable")
-    total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
     lt_debt = searched_label(bs_df.index, "long term debt")
 
     # Insert cash balance
@@ -502,7 +492,6 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(cf_df, capital_expenditures, yr)
         ) for yr in cf_df.columns
     ]
-    levered_free_cf = "Levered Free Cash Flow"
 
     # Add levered free CF row growth %
     add_growth_rate_row(cf_df, levered_free_cf, "Levered Free Cash Flow Growth %")
@@ -548,7 +537,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
     for i in range(yrs_to_predict):
         cur_yr = is_df.columns[-yrs_to_predict + i]
-        prev_yr = is_df.columns[-yrs_to_predict + i - 1]    
+        prev_yr = is_df.columns[-yrs_to_predict + i - 1]
 
         # Calculate variables
         cf_df.at[net_income_cf, cur_yr] = "='{}'!{}".format(
@@ -592,7 +581,8 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
 
 def main():
-	# Read three sheets
+    """Main."""
+    # Read three sheets
     income_statement = pd.read_excel("asset/QCOM IS.xlsx", header=4,
                                      index_col=0)
     balance_sheet = pd.read_excel("asset/QCOM BS.xlsx", header=4, index_col=0)
@@ -604,19 +594,19 @@ def main():
 
     # Slices of data
     is_search = income_statement.index.get_loc(searched_label(income_statement.index, "EBITDA"))
-    if type(is_search) == int:
+    if isinstance(is_search, int):
         income_statement = income_statement[:is_search + 1]
     else:
         income_statement = income_statement[:np.where(is_search)[-1][-1] + 1]
     bs_search = balance_sheet.index.get_loc(searched_label(
         balance_sheet.index, "total liabilities & shareholder equity")
     )
-    if type(bs_search) == int:
+    if isinstance(bs_search, int):
         balance_sheet = balance_sheet[:bs_search + 1]
     else:
         balance_sheet = balance_sheet[:np.where(bs_search)[-1][-1] + 1]
     cf_search = cash_flow.index.get_loc(searched_label(cash_flow.index, "net change in cash"))
-    if type(cf_search) == int:
+    if isinstance(cf_search, int):
         cash_flow = cash_flow[:cf_search + 1]
     else:
         cash_flow = cash_flow[:np.where(cf_search)[-1][-1] + 1]
@@ -651,6 +641,7 @@ def main():
     style_ws(wb[BS], BS, income_statement, balance_sheet, cash_flow, fye)
     style_ws(wb[CF], CF, income_statement, balance_sheet, cash_flow, fye)
     wb.save("output.xlsx")
+
 
 if __name__ == "__main__":
     main()
