@@ -1,9 +1,12 @@
-from helper import *
+"""Implementation for rendering excel output's style."""
+import types
 from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
+from helper import excel_cell, searched_label
 
 
 def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border(),
                 alignment=Alignment(), percentage=False, currency=False):
+    """Change excel style for a column or row."""
     letter1, num1 = start[0], start[1:]
     letter2, num2 = end[0], end[1:]
     if letter1 == letter2:  # column
@@ -14,8 +17,8 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
             ws[letter1 + str(i)].alignment = alignment
             if currency:
                 ws[letter1 + str(i)].number_format = '#,##0.00€'
-            if percentage and type(ws[letter1 + str(i)].value) is str:
-                if not '+' in ws[letter1 + str(i)].value:
+            if percentage and isinstance(ws[letter1 + str(i)].value, str):
+                if '+' not in ws[letter1 + str(i)].value:
                     ws[letter1 + str(i)].number_format = '0.00%'
     elif num1 == num2:  # row
         for i in range(ord(letter2) - ord(letter1) + 1):
@@ -25,8 +28,8 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
             ws[chr(ord(letter1) + i) + num1].alignment = alignment
             if currency:
                 ws[chr(ord(letter1) + i) + num1].number_format = '$#,##'
-            if percentage and type(ws[chr(ord(letter1) + i) + num1].value) is str:
-                if not '+' in ws[chr(ord(letter1) + i) + num1].value:
+            if percentage and isinstance(ws[chr(ord(letter1) + i) + num1].value, str):
+                if '+' not in ws[chr(ord(letter1) + i) + num1].value:
                     ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
     else:
         print("ERROR: style_range")
@@ -34,6 +37,7 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
 
 
 def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
+    """Change excel style for a worksheet."""
     if sheet_name == "Income Statement":
         cur_df = is_df
     elif sheet_name == "Balance Sheet":
@@ -74,7 +78,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
 
     # Style sum rows
     for cell in [letter + str(i + 1) for i in range(int(num) - 1)]:
-        if type(ws[cell].value) is str and 'SUM' in ws[cell].value and len(ws[cell].value) < 30:
+        if isinstance(ws[cell].value, str) and 'SUM' in ws[cell].value and len(ws[cell].value) < 30:
             num = cell[1:]
             ws['B' + num].font = Font(bold=True)
             style_range(ws, 'C' + num, letter + num, font=Font(bold=True),
@@ -100,7 +104,8 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
                   border_bool=False)
         driver_df = is_df.loc["Driver Ratios":]
     elif sheet_name == "Balance Sheet":
-        style_row(ws, "total shareholder equity", cur_df, bold_bool=False, border_bool=False, currency=True)
+        style_row(ws, "total shareholder equity", cur_df, bold_bool=False, border_bool=False,
+                  currency=True)
         style_row(ws, "total liabilit shareholder equity", cur_df, border_bool=False)
         style_row(ws, "driver ratio", cur_df, underline="single", border_bool=False)
         driver_df = bs_df.loc["Driver Ratios":]
