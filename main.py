@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import string
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 from style import *
@@ -14,12 +15,10 @@ CF = "Cashflow Statement"
 
 """
 TODO:
-    Get name of company from dataset.
-    Duplicate: let other funds remain. Change other duplicates
-    Generalize SUM algorithm
     Gernalize variables that not each company has
     No EBITDA case
     No other operating expense case
+    Market cap dividens per share
 """
 
 def preprocess(df, filter_in=[]):
@@ -74,7 +73,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
 
     # Declare income statement labels
     sales = searched_label(is_df.index, "total sales")
-    cogs = searched_label(is_df.index, "cost of goods sold")
+    cogs = searched_label(is_df.index, "cost of goods sold COGS including")
     is_df.index = [  # change label name from incl. to excl.
         i if i != cogs else "Cost of Goods Sold (COGS) excl. D&A" for i in list(is_df.index)
     ]
@@ -87,11 +86,10 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     interest_expense = searched_label(is_df.index, "interest expense")
     unusual = searched_label(is_df.index, "unusual expense")
     income_tax = searched_label(is_df.index, "income taxes")
-    diluted_eps = searched_label(is_df.index, "dilute eps")
+    diluted_eps = searched_label(is_df.index, "eps diluted")
     net_income = searched_label(is_df.index, "net income")
-    div_per_share = searched_label(is_df.index, "div per share")
+    div_per_share = searched_label(is_df.index, "dividends per share")
     ebitda = searched_label(is_df.index, "ebitda")
-
     # Insert pretax income row before income taxes
     pretax_df = pd.DataFrame(
         {
@@ -108,7 +106,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     dna_expense_df = pd.DataFrame(
         {
             yr: "='{}'!".format(CF) + excel_cell(
-                cf_df, searched_label(cf_df.index, "deprecia & amortiza expense"), yr
+                cf_df, searched_label(cf_df.index, "depreciation depletion & amortization expense"), yr
             ) for yr in is_df.columns
         }, index=["Depreciation & Amortization Expense"]
     )
@@ -123,7 +121,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             ) for yr in is_df.columns
         }, index=["Diluted Shares Outstanding"]
     )
-    is_df = insert_before(is_df, diluted_share_outstanding_df, "div per share")
+    is_df = insert_before(is_df, diluted_share_outstanding_df, "dividends per share")
     diluted_share_outstanding = "Diluted Shares Outstanding"
 
     # Write formulas for COGS excl. D&A
@@ -247,41 +245,41 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     )
 
     # Balance sheet labels
-    st_receivables = searched_label(bs_df.index, "short term receivable")
-    cash_st_investments = searched_label(bs_df.index, "cash short term investment")
-    inventories = searched_label(bs_df.index, "inventor")
+    st_receivables = searched_label(bs_df.index, "short term receivables")
+    cash_st_investments = searched_label(bs_df.index, "cash short term investments")
+    inventories = searched_label(bs_df.index, "inventories")
     other_cur_assets = searched_label(bs_df.index, "other current asset")
     total_cur_assets = searched_label(bs_df.index, "total current asset")
-    net_property_plant_equipment = searched_label(bs_df.index, "net property plant qquipment")
-    total_investments_n_advances = searched_label(bs_df.index, "total investment advance")
-    intangible_assets = searched_label(bs_df.index, "intangible asset")
-    deferred_tax_assets = searched_label(bs_df.index, "deferred tax asset")
-    other_assets = searched_label(bs_df.index, "other asset")
-    total_assets = searched_label(bs_df.index, "total asset")
-    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "debt st lt cur portion")
-    accounts_payable = searched_label(bs_df.index, "account payable")
+    net_property_plant_equipment = searched_label(bs_df.index, "net property plant equipment")
+    total_investments_n_advances = searched_label(bs_df.index, "total investment and advances")
+    intangible_assets = searched_label(bs_df.index, "intangible assets")
+    deferred_tax_assets = searched_label(bs_df.index, "deferred tax assets")
+    other_assets = searched_label(bs_df.index, "other assets")
+    total_assets = searched_label(bs_df.index, "total assets")
+    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "debt st lt curr portion")
+    accounts_payable = searched_label(bs_df.index, "accounts payable")
     income_tax_payable = searched_label(bs_df.index, "income tax payable")
     other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
     total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
     lt_debt = searched_label(bs_df.index, "long term debt")
-    provision_for_risks_n_charges = searched_label(bs_df.index, "provision for risk & charge")
+    provision_for_risks_n_charges = searched_label(bs_df.index, "provision for risks charges")
     deferred_tax_liabilities = searched_label(bs_df.index, "deferred tax liabilities")
     other_liabilities = searched_label(bs_df.index, "other liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
-    total_shareholder_equity = searched_label(bs_df.index, "total shareholder equity")
+    total_shareholder_equity = searched_label(bs_df.index, "total shareholders equity")
     total_liabilities_n_shareholders_equity = searched_label(
-        bs_df.index, "total liabilities shareholder equity"
+        bs_df.index, "total liabilities shareholders equity"
     )
 
     # Income statement labels
     sales = searched_label(is_df.index, "total sales")
-    cogs = searched_label(is_df.index, "cost of goods sold")
+    cogs = searched_label(is_df.index, "cost of goods sold cogs excl")
     net_income = searched_label(is_df.index, "net income")
 
     # Cash flow statement labels
-    deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization") 
-    capital_expenditures = searched_label(cf_df.index, "capital expenditure")
-    cash_div_paid = searched_label(cf_df.index, "cash div paid")
+    deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization expense") 
+    capital_expenditures = searched_label(cf_df.index, "capital expenditures")
+    cash_div_paid = searched_label(cf_df.index, "cash dividends paid")
     change_in_capital_stock = searched_label(cf_df.index, "change in capital stock")
 
     # Add driver rows to balance sheet
@@ -376,19 +374,6 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     driver_extend(bs_df, misc_cur_liabilities_growth, "avg", last_given_yr, yrs_to_predict)
     driver_extend(bs_df, inventory_ratio, "avg", last_given_yr, yrs_to_predict)
 
-    # Calculate fixed variables
-    fixed_extend(bs_df, inventories, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, total_investments_n_advances, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, intangible_assets, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, deferred_tax_assets, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, other_assets, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, st_debt_n_cur_portion_lt_debt, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, income_tax_payable, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, lt_debt, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, provision_for_risks_n_charges, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, deferred_tax_liabilities, 'prev', yrs_to_predict)
-    fixed_extend(bs_df, other_liabilities, 'prev', yrs_to_predict)
-
     # Calculate total liabilities & shareholders' equity
     bs_df.loc[total_liabilities_n_shareholders_equity] = [
         '={}+{}'.format(
@@ -446,6 +431,10 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             sum_formula(bs_df, total_liabilities, cur_yr)
         )
 
+    for label in bs_df.index:
+        if pd.notna(label) and pd.notna(bs_df.loc[label].iloc[0]) and bs_df.loc[label].iloc[-1] == '0':
+            fixed_extend(bs_df, label, 'prev', yrs_to_predict)
+
     empty_unmodified(bs_df, yrs_to_predict)
 
     return bs_df, cf_df
@@ -457,22 +446,22 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     last_given_yr = cf_df.columns[-yrs_to_predict-1]
 
     # Cash flow statement labels
-    net_income_cf = searched_label(cf_df.index, "net income")
+    net_income_cf = searched_label(cf_df.index, "net income starting line")
     deprec_deplet_n_amort = searched_label(cf_df.index, "depreciation depletion amortization")
-    deferred_taxes = searched_label(cf_df.index, "deferred taxes")
+    deferred_taxes = searched_label(cf_df.index, "deferred taxes & investment tax credit")
     other_funds = searched_label(cf_df.index, "other funds")
-    funds_from_operations = searched_label(cf_df.index, "fund from operation")
-    changes_in_working_capital = searched_label(cf_df.index, "change work capital")
-    net_operating_cf = searched_label(cf_df.index, "net operat cash flow cf")
-    capital_expenditures = searched_label(cf_df.index, "capital expenditure")
-    net_asset_acquisition = searched_label(cf_df.index, "net asset acquisiton")
-    fixed_assets_n_businesses_sale = searched_label(cf_df.index, "fixed asset sale business")
-    purchase_sale_of_investments = searched_label(cf_df.index, "purchase sale investment")
-    net_investing_cf = searched_label(cf_df.index, "net invest cash flow")
-    cash_div_paid = searched_label(cf_df.index, "cash div paid")
+    funds_from_operations = searched_label(cf_df.index, "funds from operations")
+    changes_in_working_capital = searched_label(cf_df.index, "changes in work capital")
+    net_operating_cf = searched_label(cf_df.index, "net operating cash flow")
+    capital_expenditures = searched_label(cf_df.index, "capital expenditures")
+    net_asset_acquisition = searched_label(cf_df.index, "net assets from acquisiton")
+    fixed_assets_n_businesses_sale = searched_label(cf_df.index, "fixed assets & of sale businesses")
+    purchase_sale_of_investments = searched_label(cf_df.index, "purchasesale of investments")
+    net_investing_cf = searched_label(cf_df.index, "net investing cash flow")
+    cash_div_paid = searched_label(cf_df.index, "cash dividends paid")
     change_in_capital_stock = searched_label(cf_df.index, "change in capital stock")
-    net_inssuance_reduction_of_debt = searched_label(cf_df.index, "net issuance reduct debt")
-    net_financing_cf = searched_label(cf_df.index, "net financ cash flow cf")
+    net_inssuance_reduction_of_debt = searched_label(cf_df.index, "net issuance reduction of debt")
+    net_financing_cf = searched_label(cf_df.index, "net financing cash flow")
     net_change_in_cash = searched_label(cf_df.index, "net change in cash")
     cash_balance = searched_label(cf_df.index, "cash balance")
     capex_ratio = "Capital Expenditure Revenue Ratio"
@@ -482,18 +471,18 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     sales = searched_label(is_df.index, "total sales")
     deprec_amort_expense = searched_label(is_df.index, "depreciation amortization expense")
     net_income_is = searched_label(is_df.index, "net income")
-    diluted_share_outstanding = searched_label(is_df.index, "diluted share outstanding")
-    div_per_share = searched_label(is_df.index, "dividend per share")
+    diluted_share_outstanding = searched_label(is_df.index, "diluted shares outstanding")
+    div_per_share = searched_label(is_df.index, "dividends per share")
 
     # Balance sheet labels
-    other_cur_assets = searched_label(bs_df.index, "other current asset")
-    other_cur_liabilities = searched_label(bs_df.index, "other current liabilit")
-    cash_st_investments = searched_label(bs_df.index, "cash short term investment")
-    st_receivables = searched_label(bs_df.index, "short term receivable")
-    total_cur_assets = searched_label(bs_df.index, "total current asset")
-    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "st debt cur portion lt")
-    accounts_payable = searched_label(bs_df.index, "account payable")
-    total_cur_liabilities = searched_label(bs_df.index, "total current liabilit")
+    other_cur_assets = searched_label(bs_df.index, "other current assets")
+    other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
+    cash_st_investments = searched_label(bs_df.index, "cash short term investments")
+    st_receivables = searched_label(bs_df.index, "short term receivables")
+    total_cur_assets = searched_label(bs_df.index, "total current assets")
+    st_debt_n_cur_portion_lt_debt = searched_label(bs_df.index, "st debt curr portion lt")
+    accounts_payable = searched_label(bs_df.index, "accounts payable")
+    total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
     lt_debt = searched_label(bs_df.index, "long term debt")
 
     # Insert cash balance
@@ -604,10 +593,10 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
 def main():
 	# Read three sheets
-    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+    income_statement = pd.read_excel("asset/QCOM IS.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("asset/QCOM BS.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/QCOM CF.xlsx", header=4, index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)

@@ -1,16 +1,17 @@
 import pandas as pd
 import numpy as np
+import string
 
 
 ROUNDING_DIGIT = 4
+PUNCTUATION = string.punctuation.replace('&', '').replace('-', '').replace('/', '')
 
 
 def excel_cell(df, row_label, col_label, nearby_label=None):
     """Returns corresponding excel cell position given row label and column label. 
     Note that if there are more than 26 columns, this function does not work properly."""
     if not row_label:
-        print("ERROR: excel_cell")
-        exit(1)
+        assert("ERROR: excel_cell")
     letter = chr(ord('A') + df.columns.get_loc(col_label) + 2)
     row_mask = df.index.get_loc(row_label)
     if type(row_mask) is int:
@@ -25,12 +26,14 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
 def searched_label(labels, target):
     """Returns target label from a list of DataFrame labels."""
     score_dict = {label: 0 for label in labels}
+    target = target.lower()
 
-    for word in target.split():
-        for label in set(labels):
-            if word.lower() in str(label).lower():
+    for label in set(labels):
+        for word in "".join(['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(label).lower()]).split():
+            if word == target:
+                score_dict[label] += 2
+            elif word in target:
                 score_dict[label] += 1
-
     if sum(score_dict.values()) == 0:
         return None
     def compare(pair):
@@ -38,8 +41,12 @@ def searched_label(labels, target):
             return len(pair[0])
         return 0
     result = max(sorted(score_dict.items(), key=compare), key=lambda pair: pair[1])[0]
-    for word in target.split():
-        pass
+    miss = 0
+    for word in "".join(['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(result).lower()]).split():
+        if word not in target:
+            miss += 2
+    if miss > 2:
+        return None
     return result
 
 
@@ -112,7 +119,6 @@ def fixed_extend(df, row_label, how, yrs):
     if not row_label:
         print("Empty row_label in fixed_extend")
         return
-
     if how is "prev":
         df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
     elif how is "avg":
