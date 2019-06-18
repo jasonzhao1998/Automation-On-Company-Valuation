@@ -9,13 +9,7 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
     """Changes excel style for a column or row."""
     letter1, num1 = start[0], start[1:]
     letter2, num2 = end[0], end[1:]
-    if letter1 == letter2:  # column
-        for i in range(int(num1), int(num2) + 1):
-            ws[letter1 + str(i)].font = font
-            ws[letter1 + str(i)].fill = fill
-            ws[letter1 + str(i)].border = border
-            ws[letter1 + str(i)].alignment = alignment
-    elif num1 == num2:  # row
+    if num1 == num2:  # row
         for i in range(ord(letter2) - ord(letter1) + 1):
             ws[chr(ord(letter1) + i) + num1].font = font
             ws[chr(ord(letter1) + i) + num1].fill = fill
@@ -31,6 +25,12 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
                 elif '+' in ws[chr(ord(letter1) + i) + num1].value:
                     return
                 ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
+    elif letter1 == letter2:  # column
+        for i in range(int(num1), int(num2) + 1):
+            ws[letter1 + str(i)].font = font
+            ws[letter1 + str(i)].fill = fill
+            ws[letter1 + str(i)].border = border
+            ws[letter1 + str(i)].alignment = alignment
     else:
         print("ERROR: style_range")
         exit(1)
@@ -103,21 +103,17 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
         style_row(ws, "ebit operating income", cur_df, currency=True)
         style_row(ws, "pretax income", cur_df, currency=True)
         style_row(ws, "net income", cur_df, currency=True)
-        style_row(ws, "driver ratio", cur_df, underline="single",
-                  border_bool=False)
-        driver_df = is_df.loc["Driver Ratios":]
     elif sheet_name == "Balance Sheet":
         style_row(ws, "total shareholder equity", cur_df, bold_bool=False, border_bool=False,
                   currency=True)
         style_row(ws, "total liabilit shareholder equity", cur_df, border_bool=False)
-        style_row(ws, "driver ratio", cur_df, underline="single", border_bool=False)
-        driver_df = bs_df.loc["Driver Ratios":]
     elif sheet_name == "Cashflow Statement":
         style_row(ws, "net operating cash flow cf", cur_df, currency=True)
         style_row(ws, "cash balance", cur_df, border_bool=False, currency=True)
-        style_row(ws, "driver ratio", cur_df, underline="single", border_bool=False)
-        driver_df = cf_df.loc["Driver Ratios":]
+    style_row(ws, "driver ratio", cur_df, underline="single", border_bool=False)
+    driver_df = bs_df.loc["Driver Ratios":]
 
+    # Driver ratios style
     for ratio in driver_df[driver_df.index.notna()].iloc[1:].index:
         start = excel_cell(cur_df, ratio, cur_df.columns[0])
         end = letter + str(int(start[1:]))
