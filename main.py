@@ -13,9 +13,7 @@ CF = "Cashflow Statement"
 """
 TODO:
     Gernalize variables that not each company has
-    No EBITDA case
     No other operating expense case
-    Market cap dividens per share
 """
 
 
@@ -89,6 +87,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     net_income = searched_label(is_df.index, "net income")
     div_per_share = searched_label(is_df.index, "dividends per share")
     ebitda = searched_label(is_df.index, "ebitda")
+    diluted_share_outstanding = "Diluted Shares Outstanding"
 
     # Drop EBITDA if exists
     if ebitda:
@@ -103,7 +102,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             ) for yr in is_df.columns
         }, index=["Pretax Income"]
     )
-    is_df = insert_before(is_df, pretax_df, "income taxes")
+    is_df = insert_before(is_df, pretax_df, income_tax)
     pretax = "Pretax Income"
 
     # Insert depreciation & amortization expense before SG&A expense
@@ -116,19 +115,8 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             ) for yr in is_df.columns
         }, index=["Depreciation & Amortization Expense"]
     )
-    is_df = insert_before(is_df, dna_expense_df, "sg&a expense")
+    is_df = insert_before(is_df, dna_expense_df, sgna)
     dna_expense = "Depreciation & Amortization Expense"
-
-    # Insert diluted shares outstanding before dividends per share
-    diluted_share_outstanding_df = pd.DataFrame(
-        {
-            yr: "={}/{}".format(
-                excel_cell(is_df, net_income, yr), excel_cell(is_df, diluted_eps, yr)
-            ) for yr in is_df.columns
-        }, index=["Diluted Shares Outstanding"]
-    )
-    is_df = insert_before(is_df, diluted_share_outstanding_df, "dividends per share")
-    diluted_share_outstanding = "Diluted Shares Outstanding"
 
     # Write formulas for COGS excl. D&A
     is_df.loc[cogs] = [
@@ -172,7 +160,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             ) for yr in is_df.columns
         }, index=[ebitda]
     )
-    is_df = insert_after(is_df, ebitda_df, "dividends per share")
+    is_df = insert_after(is_df, ebitda_df, div_per_share)
 
     # Write formulas for driver ratios
     initialize_ratio_row(is_df, div_per_share, diluted_eps, "Dividend Payout Ratio")
@@ -189,6 +177,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     fixed_extend(is_df, nonoperating_income, "prev", yrs_to_predict)
     fixed_extend(is_df, interest_expense, "prev", yrs_to_predict)
     fixed_extend(is_df, div_per_share, "prev", yrs_to_predict)  # FIXME
+    fixed_extend(is_df, diluted_share_outstanding, "prev", yrs_to_predict)
 
     # Write formula for net income
     is_df.loc[net_income] = [
@@ -311,16 +300,18 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     # Miscellaneous Current Liabilities Growth %
     add_growth_rate_row(bs_df, other_cur_liabilities, "Miscellaneous Current Liabilities Growth %")
     misc_cur_liabilities_growth = "Miscellaneous Current Liabilities Growth %"
+
     # Inventory turnober ratio
-    add_empty_row(bs_df)
-    bs_df.loc["Inventory Turnover Ratio"] = np.nan
-    bs_df.loc["Inventory Turnover Ratio"].iloc[1:] = [
-        "='{}'!{}/({}+{})*2".format(
-            IS, excel_cell(is_df, cogs, bs_df.columns[i + 1]),
-            excel_cell(bs_df, inventories, bs_df.columns[i]),
-            excel_cell(bs_df, inventories, bs_df.columns[i+1])
-        ) for i in range(len(bs_df.columns) - 1)
-    ]
+    if inventories:
+        add_empty_row(bs_df)
+        bs_df.loc["Inventory Turnover Ratio"] = np.nan
+        bs_df.loc["Inventory Turnover Ratio"].iloc[1:] = [
+            "='{}'!{}/({}+{})*2".format(
+                IS, excel_cell(is_df, cogs, bs_df.columns[i + 1]),
+                excel_cell(bs_df, inventories, bs_df.columns[i]),
+                excel_cell(bs_df, inventories, bs_df.columns[i+1])
+            ) for i in range(len(bs_df.columns) - 1)
+        ]
     inventory_ratio = "Inventory Turnover Ratio"
 
     # Add driver rows to cash flow statement
@@ -380,11 +371,12 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     driver_extend(bs_df, inventory_ratio, "avg", last_given_yr, yrs_to_predict)
 
     # Calculate total liabilities & shareholders' equity
+
     bs_df.loc[total_liabilities_n_shareholders_equity] = [
         '={}+{}'.format(
             excel_cell(bs_df, total_liabilities, yr),
             excel_cell(bs_df, total_shareholder_equity, yr)
-        ) for yr in is_df.columns
+        ) for yr in bs_df.columns
     ]
 
     for i in range(yrs_to_predict):
@@ -457,7 +449,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
     deferred_taxes = searched_label(cf_df.index, "deferred taxes & investment tax credit")
     other_funds = searched_label(cf_df.index, "other funds")
     funds_from_operations = searched_label(cf_df.index, "funds from operations")
-    changes_in_working_capital = searched_label(cf_df.index, "changes in work capital")
+    changes_in_working_capital = searched_label(cf_df.index, "changes in working capital")
     net_operating_cf = searched_label(cf_df.index, "net operating cash flow")
     capital_expenditures = searched_label(cf_df.index, "capital expenditures")
     net_asset_acquisition = searched_label(cf_df.index, "net assets from acquisiton")
@@ -597,10 +589,11 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 def main():
     """Main."""
     # Read three sheets
-    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
+    income_statement = pd.read_excel("asset/ADS IS.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("asset/ADS BS.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/ADS CF.xlsx", header=4, index_col=0)
+    market_cap = pd.read_excel("asset/ADS MKT.xlsx", index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
@@ -628,6 +621,12 @@ def main():
     # FIXME temporary parameters
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
     yrs_to_predict = len(growth_rates)
+
+    # FIXME diluted shares outstanding
+    income_statement.loc["Diluted Shares Outstanding"] = np.nan
+    income_statement.loc["Diluted Shares Outstanding"][-1] = market_cap.loc[
+        searched_label(market_cap.index, "fully diluted equity capitalization")
+    ][0]
 
     # Cast year data type
     income_statement.columns = income_statement.columns.astype(int)

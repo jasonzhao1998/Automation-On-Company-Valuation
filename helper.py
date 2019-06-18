@@ -111,6 +111,8 @@ def add_growth_rate_row(df, label, new_label):
 
 def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_excluded=0):
     """Writes formulas for driver rows."""
+    if row_label not in df.index:
+        return
     if how == "round":
         formula = "=ROUND(" + excel_cell(df, row_label, last_given_yr) + ',' + \
                   str(ROUNDING_DIGIT) + ')'
