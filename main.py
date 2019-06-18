@@ -39,7 +39,7 @@ def preprocess(df):
     df.columns = [
         '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
     ]
-    
+
     # Manage duplicate labels
     ignore = [searched_label(df.index, 'other funds')]
     unique_dict = {}
@@ -670,7 +670,7 @@ def main():
     style_ws(wb[IS], IS, income_statement, balance_sheet, cash_flow, fye, is_unit)
     style_ws(wb[BS], BS, income_statement, balance_sheet, cash_flow, fye, is_unit)
     style_ws(wb[CF], CF, income_statement, balance_sheet, cash_flow, fye, is_unit)
-    wb.save("output.xlsx")
+    wb.save("{}-output.xlsx".format(NAME))
 
 
 if __name__ == "__main__":
