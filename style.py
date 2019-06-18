@@ -15,11 +15,6 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
             ws[letter1 + str(i)].fill = fill
             ws[letter1 + str(i)].border = border
             ws[letter1 + str(i)].alignment = alignment
-            if currency:
-                ws[letter1 + str(i)].number_format = '#,##0.00€'
-            if percentage and isinstance(ws[letter1 + str(i)].value, str):
-                if '+' not in ws[letter1 + str(i)].value:
-                    ws[letter1 + str(i)].number_format = '0.00%'
     elif num1 == num2:  # row
         for i in range(ord(letter2) - ord(letter1) + 1):
             ws[chr(ord(letter1) + i) + num1].font = font
@@ -28,9 +23,14 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
             ws[chr(ord(letter1) + i) + num1].alignment = alignment
             if currency:
                 ws[chr(ord(letter1) + i) + num1].number_format = '$#,##'
-            if percentage and isinstance(ws[chr(ord(letter1) + i) + num1].value, str):
-                if '+' not in ws[chr(ord(letter1) + i) + num1].value:
-                    ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
+            elif percentage and isinstance(ws[chr(ord(letter1) + i) + num1].value, str):
+                if '365' in ws[chr(ord(letter1) + i) + num1].value:
+                    return
+                elif '366' in ws[chr(ord(letter1) + i) + num1].value:
+                    return
+                elif '+' in ws[chr(ord(letter1) + i) + num1].value:
+                    return
+                ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
     else:
         print("ERROR: style_range")
         exit(1)
