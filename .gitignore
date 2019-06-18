@@ -1,4 +1,4 @@
 .DS_store
 ~*
-output.xlsx
+output*.xlsx
 __pycache__
