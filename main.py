@@ -89,6 +89,11 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     net_income = searched_label(is_df.index, "net income")
     div_per_share = searched_label(is_df.index, "dividends per share")
     ebitda = searched_label(is_df.index, "ebitda")
+
+    # Drop EBITDA if exists
+    if ebitda:
+        is_df.drop(ebitda, inplace=True)
+
     # Insert pretax income row before income taxes
     pretax_df = pd.DataFrame(
         {
@@ -159,6 +164,16 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
     # Append growth rates to driver row
     is_df.loc[sales_growth].iloc[-yrs_to_predict:] = growth_rates
 
+    # Write formulas for EBITDA
+    ebitda_df = pd.DataFrame(
+        {
+            yr: '={}+{}'.format(
+                excel_cell(is_df, dna_expense, yr), excel_cell(is_df, ebit, yr)
+            ) for yr in is_df.columns
+        }, index=[ebitda]
+    )
+    is_df = insert_after(is_df, ebitda_df, "dividends per share")
+
     # Write formulas for driver ratios
     initialize_ratio_row(is_df, div_per_share, diluted_eps, "Dividend Payout Ratio")
     initialize_ratio_row(is_df, ebitda, sales, "EBITDA Margin", sales_growth)
@@ -226,9 +241,7 @@ def process_is(is_df, cf_df, growth_rates, yrs_to_predict):
             )
         else:
             is_df.at[ebitda, cur_yr] = [
-                np.nan, '={}+{}'.format(
-                    excel_cell(is_df, dna_expense, cur_yr), excel_cell(is_df, ebit, cur_yr)
-                )
+                np.nan, 
             ]
     empty_unmodified(is_df, yrs_to_predict)
 
@@ -492,6 +505,7 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(cf_df, capital_expenditures, yr)
         ) for yr in cf_df.columns
     ]
+    levered_free_cf = "Levered Free Cash Flow"
 
     # Add levered free CF row growth %
     add_growth_rate_row(cf_df, levered_free_cf, "Levered Free Cash Flow Growth %")
@@ -583,10 +597,10 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 def main():
     """Main."""
     # Read three sheets
-    income_statement = pd.read_excel("asset/QCOM IS.xlsx", header=4,
+    income_statement = pd.read_excel("NVIDIA/NVIDIA Income Statement.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("asset/QCOM BS.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/QCOM CF.xlsx", header=4, index_col=0)
+    balance_sheet = pd.read_excel("NVIDIA/NVIDIA Balance Sheet.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("NVIDIA/NVIDIA Cash Flow.xlsx", header=4, index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
