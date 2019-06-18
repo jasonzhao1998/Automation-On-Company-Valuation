@@ -163,3 +163,15 @@ def sum_formula(df, row_label, col_label, start_label=None, offset=0):
         excel_cell(df, end_label, col_label, row_label)
     )
     return formula
+
+
+def get_unit(df):
+    """Gets the unit of the items."""
+    for label in df.index:
+        if not isinstance(label, str):
+            continue
+        if 'million' in label:
+            return 'm'
+        elif 'billion' in label:
+            return 'b'
+    return None

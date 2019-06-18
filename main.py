@@ -12,8 +12,9 @@ CF = "Cashflow Statement"
 
 """
 TODO:
-    Gernalize variables that not each company has
-    No other operating expense case
+    Million Billion problem
+    Run on all companies
+    Get name of corporation
 """
 
 
@@ -259,7 +260,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     other_cur_liabilities = searched_label(bs_df.index, "other current liabilities")
     total_cur_liabilities = searched_label(bs_df.index, "total current liabilities")
     total_liabilities = searched_label(bs_df.index, "total liabilities")
-    total_shareholder_equity = searched_label(bs_df.index, "total shareholders equity")
+    total_equity = searched_label(bs_df.index, "total equity")
     total_liabilities_n_shareholders_equity = searched_label(
         bs_df.index, "total liabilities shareholders equity"
     )
@@ -375,7 +376,7 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
     bs_df.loc[total_liabilities_n_shareholders_equity] = [
         '={}+{}'.format(
             excel_cell(bs_df, total_liabilities, yr),
-            excel_cell(bs_df, total_shareholder_equity, yr)
+            excel_cell(bs_df, total_equity, yr)
         ) for yr in bs_df.columns
     ]
 
@@ -406,8 +407,8 @@ def process_bs(is_df, bs_df, cf_df, yrs_to_predict):
             excel_cell(bs_df, other_cur_liabilities, prev_yr),
             excel_cell(bs_df, misc_cur_liabilities_growth, cur_yr)
         )
-        bs_df.at[total_shareholder_equity, cur_yr] = "={}+'{}'!{}+'{}'!{}+'{}'!{}".format(
-            excel_cell(bs_df, total_shareholder_equity, prev_yr), CF,
+        bs_df.at[total_equity, cur_yr] = "={}+'{}'!{}+'{}'!{}+'{}'!{}".format(
+            excel_cell(bs_df, total_equity, prev_yr), CF,
             excel_cell(cf_df, change_in_capital_stock, cur_yr), IS,
             excel_cell(is_df, net_income, cur_yr), CF, excel_cell(cf_df, cash_div_paid, cur_yr)
         )
@@ -589,15 +590,33 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 def main():
     """Main."""
     # Read three sheets
-    income_statement = pd.read_excel("asset/ADS IS.xlsx", header=4,
+    income_statement = pd.read_excel("asset/CVX IS.xlsx", header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("asset/ADS BS.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/ADS CF.xlsx", header=4, index_col=0)
-    market_cap = pd.read_excel("asset/ADS MKT.xlsx", index_col=0)
+    balance_sheet = pd.read_excel("asset/CVX BS.xlsx", header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/CVX CF.xlsx", header=4, index_col=0)
+    market_cap = pd.read_excel("asset/CVX MKT.xlsx", index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
     cash_flow, fye = preprocess(cash_flow)
+
+    is_unit, bs_unit = get_unit(income_statement), get_unit(balance_sheet)
+    cf_unit, mkt_unit = get_unit(cash_flow), get_unit(market_cap)
+
+    # FIXME
+    if is_unit != bs_unit and bs_unit != cf_unit:
+        print("Different units.")
+        exit(1)
+
+    if mkt_unit != is_unit:
+        if mkt_unit == 'm':
+            multiply_market = 0.001
+        else:  # FIXME
+            print("Market unit bigger")
+            exit(1)
+    else:
+        multiply_market = 1
+
 
     # Slices of data
     is_search = income_statement.index.get_loc(searched_label(income_statement.index, "EBITDA"))
@@ -626,7 +645,7 @@ def main():
     income_statement.loc["Diluted Shares Outstanding"] = np.nan
     income_statement.loc["Diluted Shares Outstanding"][-1] = market_cap.loc[
         searched_label(market_cap.index, "fully diluted equity capitalization")
-    ][0]
+    ][0] * multiply_market
 
     # Cast year data type
     income_statement.columns = income_statement.columns.astype(int)
@@ -650,9 +669,9 @@ def main():
         wb[BS].append(r)
     for r in dataframe_to_rows(cash_flow):
         wb[CF].append(r)
-    style_ws(wb[IS], IS, income_statement, balance_sheet, cash_flow, fye)
-    style_ws(wb[BS], BS, income_statement, balance_sheet, cash_flow, fye)
-    style_ws(wb[CF], CF, income_statement, balance_sheet, cash_flow, fye)
+    style_ws(wb[IS], IS, income_statement, balance_sheet, cash_flow, fye, is_unit)
+    style_ws(wb[BS], BS, income_statement, balance_sheet, cash_flow, fye, is_unit)
+    style_ws(wb[CF], CF, income_statement, balance_sheet, cash_flow, fye, is_unit)
     wb.save("output.xlsx")
 
 

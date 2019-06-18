@@ -36,7 +36,7 @@ def style_range(ws, start, end, fill=PatternFill(), font=Font(), border=Border()
         exit(1)
 
 
-def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
+def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
     """Changes excel style for a worksheet."""
     if sheet_name == "Income Statement":
         cur_df = is_df
@@ -59,7 +59,10 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye):
     ws['B2'] = sheet_name
     ws['B2'].font = Font(bold=True)
     ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
-    ws['B3'] = "($ in millions of U.S. Dollar)"
+    if unit == 'm':
+        ws['B3'] = "($ in millions of U.S. Dollar)"
+    else:
+        ws['B3'] = "($ in billions of U.S. Dollar)"
     ws['B3'].font = Font(italic=True)
     style_range(ws, 'B3', letter + '3', fill=PatternFill(fill_type='solid', fgColor='bababa'))
 
