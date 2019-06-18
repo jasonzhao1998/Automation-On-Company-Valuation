@@ -111,7 +111,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
         style_row(ws, "net operating cash flow cf", cur_df, currency=True)
         style_row(ws, "cash balance", cur_df, border_bool=False, currency=True)
     style_row(ws, "driver ratio", cur_df, underline="single", border_bool=False)
-    driver_df = bs_df.loc["Driver Ratios":]
+    driver_df = cur_df.loc["Driver Ratios":]
 
     # Driver ratios style
     for ratio in driver_df[driver_df.index.notna()].iloc[1:].index:

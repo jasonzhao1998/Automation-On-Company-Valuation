@@ -6,17 +6,18 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from style import style_ws
 from helper import *
 
+NAME = "NVIDIA"
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
 
 """
 TODO:
-    Million Billion problem
-    Run on all companies
-    Get name of corporation
+    Get name of corporation automatically.
+    Customize number of years to consider.
+    Million billion problem.
+    Optimize searched label.
 """
-
 
 def preprocess(df):
     """Data cleaning."""
@@ -38,7 +39,7 @@ def preprocess(df):
     df.columns = [
         '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
     ]
-
+    
     # Manage duplicate labels
     ignore = [searched_label(df.index, 'other funds')]
     unique_dict = {}
@@ -589,12 +590,11 @@ def process_cf(is_df, bs_df, cf_df, yrs_to_predict):
 
 def main():
     """Main."""
-    # Read three sheets
-    income_statement = pd.read_excel("asset/CVX IS.xlsx", header=4,
+    income_statement = pd.read_excel("asset/{} IS.xlsx".format(NAME), header=4,
                                      index_col=0)
-    balance_sheet = pd.read_excel("asset/CVX BS.xlsx", header=4, index_col=0)
-    cash_flow = pd.read_excel("asset/CVX CF.xlsx", header=4, index_col=0)
-    market_cap = pd.read_excel("asset/CVX MKT.xlsx", index_col=0)
+    balance_sheet = pd.read_excel("asset/{} BS.xlsx".format(NAME), header=4, index_col=0)
+    cash_flow = pd.read_excel("asset/{} CF.xlsx".format(NAME), header=4, index_col=0)
+    market_cap = pd.read_excel("asset/{} MKT.xlsx".format(NAME), index_col=0)
 
     income_statement, _ = preprocess(income_statement)
     balance_sheet, _ = preprocess(balance_sheet)
@@ -607,7 +607,6 @@ def main():
     if is_unit != bs_unit and bs_unit != cf_unit:
         print("Different units.")
         exit(1)
-
     if mkt_unit != is_unit:
         if mkt_unit == 'm':
             multiply_market = 0.001
@@ -616,7 +615,6 @@ def main():
             exit(1)
     else:
         multiply_market = 1
-
 
     # Slices of data
     is_search = income_statement.index.get_loc(searched_label(income_statement.index, "EBITDA"))

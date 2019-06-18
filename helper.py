@@ -131,20 +131,8 @@ def fixed_extend(df, row_label, how, yrs):
         return
     if how == "prev":
         df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
-    elif how == "avg":
-        mean = df.loc[row_label].iloc[:-yrs].mean(axis=0)
-        df.at[row_label, df.columns[-yrs]] = mean
-    elif how == "mix":
-        mean = df.loc[row_label].iloc[:-3].mean(axis=0)
-        if abs(mean - df.loc[row_label, df.columns[-2]]) > mean * 0.5:
-            df.at[row_label, df.columns[-1]] = df.loc[row_label].iloc[:-1].mean(axis=0)
-        else:
-            df.at[row_label, df.columns[-1]] = df.loc[row_label, df.columns[-2]]
     elif how == "zero":
         df.at[row_label, df.columns[-yrs:]] = 0
-    else:
-        print("ERROR: fixed_extend")
-        exit(1)
 
 
 def sum_formula(df, row_label, col_label, start_label=None, offset=0):
