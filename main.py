@@ -109,7 +109,8 @@ class ValuationMachine:
         sales = searched_label(self.is_df.index, "total sales")
         cogs = searched_label(self.is_df.index, "cost of goods sold COGS including")
         self.is_df.index = [  # change label name from incl. to excl.
-            i if i != cogs else "Cost of Goods Sold (COGS) excl. D&A" for i in list(self.is_df.index)
+            i if i != cogs else "Cost of Goods Sold (COGS) excl. D&A" \
+            for i in list(self.is_df.index)
         ]
         cogs = "Cost of Goods Sold (COGS) excl. D&A"
         gross_income = searched_label(self.is_df.index, "gross income")
@@ -253,7 +254,8 @@ class ValuationMachine:
                 sum_formula(self.is_df, ebit, cur_yr, gross_income, 1)
             )
             self.is_df.at[unusual, cur_yr] = '={}*{}'.format(
-                excel_cell(self.is_df, ebit, cur_yr), excel_cell(self.is_df, unusual_ratio, cur_yr)
+                excel_cell(self.is_df, ebit, cur_yr),
+                excel_cell(self.is_df, unusual_ratio, cur_yr)
             )
             self.is_df.at[pretax, cur_yr] = '={}+{}-{}-{}'.format(
                 excel_cell(self.is_df, ebit, cur_yr),
@@ -414,7 +416,8 @@ class ValuationMachine:
         )
         driver_extend(self.bs_df, dpo, "avg", last_given_yr, yrs_to_predict)
         driver_extend(self.bs_df, other_cur_assets_growth, "avg", last_given_yr, yrs_to_predict)
-        driver_extend(self.bs_df, misc_cur_liabilities_growth, "avg", last_given_yr, yrs_to_predict)
+        driver_extend(self.bs_df, misc_cur_liabilities_growth, "avg",
+                      last_given_yr, yrs_to_predict)
         driver_extend(self.bs_df, inventory_ratio, "avg", last_given_yr, yrs_to_predict)
 
         # Calculate total liabilities & shareholders' equity
@@ -494,10 +497,12 @@ class ValuationMachine:
         net_income_cf = searched_label(self.cf_df.index, "net income starting line")
         deprec_deplet_n_amort = searched_label(self.cf_df.index,
                                                "depreciation depletion amortization")
-        deferred_taxes = searched_label(self.cf_df.index, "deferred taxes & investment tax credit")
+        deferred_taxes = searched_label(self.cf_df.index,
+                                        "deferred taxes & investment tax credit")
         other_funds = searched_label(self.cf_df.index, "other funds")
         funds_from_operations = searched_label(self.cf_df.index, "funds from operations")
-        changes_in_working_capital = searched_label(self.cf_df.index, "changes in working capital")
+        changes_in_working_capital = searched_label(self.cf_df.index,
+                                                    "changes in working capital")
         net_operating_cf = searched_label(self.cf_df.index, "net operating cash flow")
         capital_expenditures = searched_label(self.cf_df.index, "capital expenditures")
         net_asset_acquisition = searched_label(self.cf_df.index, "net assets from acquisiton")
@@ -517,7 +522,8 @@ class ValuationMachine:
 
         # Income statement labels
         sales = searched_label(self.is_df.index, "total sales")
-        deprec_amort_expense = searched_label(self.is_df.index, "depreciation amortization expense")
+        deprec_amort_expense = searched_label(self.is_df.index,
+                                              "depreciation amortization expense")
         net_income_is = searched_label(self.is_df.index, "net income")
         diluted_share_outstanding = searched_label(self.is_df.index, "diluted shares outstanding")
         div_per_share = searched_label(self.is_df.index, "dividends per share")
@@ -535,8 +541,12 @@ class ValuationMachine:
             "='{}'!{}".format(BS, excel_cell(self.bs_df, cash_st_investments, last_given_yr))
         ] + [
             '={}+{}'.format(
-                excel_cell(self.cf_df, "Cash Balance", self.cf_df.columns[-yrs_to_predict + i - 1]),
-                excel_cell(self.cf_df, net_change_in_cash, self.cf_df.columns[-yrs_to_predict + i])
+                excel_cell(
+                    self.cf_df, "Cash Balance", self.cf_df.columns[-yrs_to_predict + i - 1]
+                ),
+                excel_cell(
+                    self.cf_df, net_change_in_cash, self.cf_df.columns[-yrs_to_predict + i]
+                )
             ) for i in range(yrs_to_predict)
         ]
 
@@ -609,15 +619,19 @@ class ValuationMachine:
                 self.cf_df, funds_from_operations, cur_yr
             )
 
-            self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{})-SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{})".format(
                 BS, excel_cell(self.bs_df, st_receivables, prev_yr),
-                excel_cell(self.bs_df, other_cur_assets, prev_yr),
+                excel_cell(self.bs_df, other_cur_assets, prev_yr)
+            )
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{})".format(
                 BS, excel_cell(self.bs_df, st_receivables, cur_yr),
                 excel_cell(self.bs_df, other_cur_assets, cur_yr)
             )
-            self.cf_df.at[changes_in_working_capital, cur_yr] += "+SUM('{}'!{}:{})-SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "+SUM('{}'!{}:{})".format(
                 BS, excel_cell(self.bs_df, accounts_payable, cur_yr),
-                excel_cell(self.bs_df, other_cur_liabilities, cur_yr),
+                excel_cell(self.bs_df, other_cur_liabilities, cur_yr)
+            )
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{})".format(
                 BS, excel_cell(self.bs_df, accounts_payable, prev_yr),
                 excel_cell(self.bs_df, other_cur_liabilities, prev_yr)
             )
