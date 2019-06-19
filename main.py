@@ -604,9 +604,9 @@ def main():
     cf_unit, mkt_unit = get_unit(cash_flow), get_unit(market_cap)
 
     # FIXME
-    if is_unit != bs_unit and bs_unit != cf_unit:
-        print("Different units.")
-        exit(1)
+    if is_unit != bs_unit or bs_unit != cf_unit:
+        print("is:{}, bs:{}, cf:{}".format(is_unit, bs_unit, cf_unit))
+    
     if mkt_unit != is_unit:
         if mkt_unit == 'm':
             multiply_market = 0.001
