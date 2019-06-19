@@ -1,22 +1,25 @@
 """Main program's implementation."""
+import os
 import openpyxl
 import numpy as np
 import pandas as pd
+from shutil import rmtree
 from datetime import datetime
 from openpyxl.utils.dataframe import dataframe_to_rows
 from style import style_ws
 from helper import *
 
-NAME = "PG"
+NAME = [
+    "NFLX", "AAPL", "PG", "ADS", "AMGN", "AMZN", "CBRE", "COST", "CVX", "DAL", "FB",
+    "GOOGL", "MMM", "NKE", "QCOM", "T", "TRIP"
+] # GS
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
 
 """
 TODO:
-    Get name of corporation automatically.
     Customize number of years to consider.
-    Million billion problem.
     Optimize searched label.
 """
 
@@ -44,7 +47,7 @@ class ValuationMachine:
 
         # FIXME
         if self.is_unit != self.bs_unit or self.bs_unit != self.cf_unit:
-            print("is:{}, bs:{}, cf:{}".format(self.is_unit, self.bs_unit, self.cf_unit))
+            print("{} is:{}, bs:{}, cf:{}".format(self.name, self.is_unit, self.bs_unit, self.cf_unit))
     
         if self.mkt_unit != self.is_unit:
             if self.mkt_unit == 'm':
@@ -55,16 +58,25 @@ class ValuationMachine:
         else:
             self.mkt_multiplier = 1
 
-        if self.is_unit != self.bs_unit:  # assume CF and IS have the same units and BS bigger unit
-            self.extra_bs = "/1000"
-            self.extra_cf = "*1000"
+        if self.is_unit != self.bs_unit:  # assume CF and IS have the same units
+            if self.bs_unit == 'b':
+                self.extra_bs = "/1000"
+                self.extra_cf = "*1000"
+            else:
+                self.extra_bs = "*1000"
+                self.extra_cf = "/1000"
         else:
             self.extra_bs = ""
             self.extra_cf = ""
 
 
     def slice_data(self):
-        is_search = self.is_df.index.get_loc(searched_label(self.is_df.index, "EBITDA"))
+        if searched_label(self.is_df.index, "EBITDA"):
+            is_search = self.is_df.index.get_loc(searched_label(self.is_df.index, "EBITDA"))
+        else:
+            is_search = self.is_df.index.get_loc(
+                searched_label(self.is_df.index, "dividends per share")
+            )
         if isinstance(is_search, int):
             self.is_df = self.is_df[:is_search + 1]
         else:
@@ -97,9 +109,9 @@ class ValuationMachine:
         for r in dataframe_to_rows(self.cf_df):
             wb[CF].append(r)
         style_ws(wb[IS], IS, self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit)
-        style_ws(wb[BS], BS, self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit)
-        style_ws(wb[CF], CF, self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit)
-        wb.save("output_{}_{}.xlsx".format(NAME, datetime.now().strftime('%H-%M-%S')))
+        style_ws(wb[BS], BS, self.is_df, self.bs_df, self.cf_df, self.fye, self.bs_unit)
+        style_ws(wb[CF], CF, self.is_df, self.bs_df, self.cf_df, self.fye, self.cf_unit)
+        wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
 
     def process_is(self):
         """Manipulates income statement."""
@@ -332,13 +344,14 @@ class ValuationMachine:
         add_empty_row(self.bs_df)
         self.bs_df.loc["Driver Ratios"] = np.nan
         # DSO
-        self.bs_df.loc["DSO"] = [
-            "={}/'{}'!{}{}*365".format(
-                excel_cell(self.bs_df, st_receivables, yr), IS,
-                excel_cell(self.is_df, sales, yr), self.extra_cf
-            ) for yr in self.bs_df.columns
-        ]
-        dso = "DSO"
+        if st_receivables:
+            self.bs_df.loc["DSO"] = [
+                "={}/'{}'!{}{}*365".format(
+                    excel_cell(self.bs_df, st_receivables, yr), IS,
+                    excel_cell(self.is_df, sales, yr), self.extra_cf
+                ) for yr in self.bs_df.columns
+            ]
+            dso = "DSO"
         # Other current assets growth %
         add_growth_rate_row(self.bs_df, other_cur_assets, "Other Current Assets Growth %")
         other_cur_assets_growth = "Other Current Assets Growth %"
@@ -421,9 +434,10 @@ class ValuationMachine:
         self.bs_df = insert_before(self.bs_df, balance_df, "working capital")
 
         # Calculate driver ratios
-        self.bs_df.loc[dso].iloc[-yrs_to_predict:] = '=' + excel_cell(
-            self.bs_df, dso, self.bs_df.columns[-yrs_to_predict - 2]
-        )
+        if st_receivables:
+            self.bs_df.loc[dso].iloc[-yrs_to_predict:] = '=' + excel_cell(
+                self.bs_df, dso, self.bs_df.columns[-yrs_to_predict - 2]
+            )
         driver_extend(self.bs_df, dpo, "avg", last_given_yr, yrs_to_predict)
         driver_extend(self.bs_df, other_cur_assets_growth, "avg", last_given_yr, yrs_to_predict)
         driver_extend(self.bs_df, misc_cur_liabilities_growth, "avg",
@@ -447,10 +461,11 @@ class ValuationMachine:
             self.bs_df.at[cash_st_investments, cur_yr] = "='{}'!{}{}".format(
                 CF, excel_cell(self.cf_df, cash_balance, cur_yr), self.extra_bs
             )
-            self.bs_df.at[st_receivables, cur_yr] = "={}/365*'{}'!{}{}".format(
-                excel_cell(self.bs_df, dso, cur_yr), IS, excel_cell(self.is_df, sales, cur_yr),
-                self.extra_bs
-            )
+            if st_receivables:
+                self.bs_df.at[st_receivables, cur_yr] = "={}/365*'{}'!{}{}".format(
+                    excel_cell(self.bs_df, dso, cur_yr), IS, excel_cell(self.is_df, sales, cur_yr),
+                    self.extra_bs
+                )
             self.bs_df.at[other_cur_assets, cur_yr] = '={}*(1+{})'.format(
                 excel_cell(self.bs_df, other_cur_assets, prev_yr),
                 excel_cell(self.bs_df, other_cur_assets_growth, cur_yr)
@@ -634,12 +649,16 @@ class ValuationMachine:
             )
 
             self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{}){}".format(
-                BS, excel_cell(self.bs_df, st_receivables, prev_yr),
-                excel_cell(self.bs_df, other_cur_assets, prev_yr), self.extra_cf
+                BS, excel_cell(
+                    self.bs_df, self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
+                    prev_yr
+                ), excel_cell(self.bs_df, other_cur_assets, prev_yr), self.extra_cf
             )
             self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{}){}".format(
-                BS, excel_cell(self.bs_df, st_receivables, cur_yr),
-                excel_cell(self.bs_df, other_cur_assets, cur_yr), self.extra_cf
+                BS, excel_cell(
+                    self.bs_df, self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
+                    cur_yr
+                ), excel_cell(self.bs_df, other_cur_assets, cur_yr), self.extra_cf
             )
             self.cf_df.at[changes_in_working_capital, cur_yr] += "+SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(self.bs_df, accounts_payable, cur_yr),
@@ -667,16 +686,21 @@ class ValuationMachine:
 
 def main():
     """Call all methods."""
+    if os.path.exists('output'):
+        rmtree('output')
+    os.mkdir('output')
+
     growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
-    vm = ValuationMachine(NAME, growth_rates)
-    vm.read()
-    vm.preprocess()
-    vm.get_units()
-    vm.slice_data()
-    vm.process_is()
-    vm.process_bs()
-    vm.process_cf()
-    vm.style()
+    for i in NAME:
+        vm = ValuationMachine(i, growth_rates)
+        vm.read()
+        vm.preprocess()
+        vm.get_units()
+        vm.slice_data()
+        vm.process_is()
+        vm.process_bs()
+        vm.process_cf()
+        vm.style()
 
 
 if __name__ == "__main__":
