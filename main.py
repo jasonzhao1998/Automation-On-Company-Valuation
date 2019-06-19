@@ -7,7 +7,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from style import style_ws
 from helper import *
 
-NAME = "NVIDIA"
+NAME = "PG"
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
@@ -54,6 +54,14 @@ class ValuationMachine:
                 exit(1)
         else:
             self.mkt_multiplier = 1
+
+        if self.is_unit != self.bs_unit:  # assume CF and IS have the same units and BS bigger unit
+            self.extra_bs = "/1000"
+            self.extra_cf = "*1000"
+        else:
+            self.extra_bs = ""
+            self.extra_cf = ""
+
 
     def slice_data(self):
         is_search = self.is_df.index.get_loc(searched_label(self.is_df.index, "EBITDA"))
@@ -325,8 +333,9 @@ class ValuationMachine:
         self.bs_df.loc["Driver Ratios"] = np.nan
         # DSO
         self.bs_df.loc["DSO"] = [
-            "={}/'{}'!{}*365".format(
-                excel_cell(self.bs_df, st_receivables, yr), IS, excel_cell(self.is_df, sales, yr)
+            "={}/'{}'!{}{}*365".format(
+                excel_cell(self.bs_df, st_receivables, yr), IS,
+                excel_cell(self.is_df, sales, yr), self.extra_cf
             ) for yr in self.bs_df.columns
         ]
         dso = "DSO"
@@ -336,8 +345,9 @@ class ValuationMachine:
         # DPO
         add_empty_row(self.bs_df)
         self.bs_df.loc["DPO"] = [
-            "={}/'{}'!{}*366".format(
-                excel_cell(self.bs_df, accounts_payable, yr), IS, excel_cell(self.is_df, cogs, yr)
+            "={}/'{}'!{}{}*366".format(
+                excel_cell(self.bs_df, accounts_payable, yr), IS,
+                excel_cell(self.is_df, cogs, yr), self.extra_cf
             ) for yr in self.bs_df.columns
         ]
         dpo = "DPO"
@@ -351,8 +361,8 @@ class ValuationMachine:
             add_empty_row(self.bs_df)
             self.bs_df.loc["Inventory Turnover Ratio"] = np.nan
             self.bs_df.loc["Inventory Turnover Ratio"].iloc[1:] = [
-                "='{}'!{}/({}+{})*2".format(
-                    IS, excel_cell(self.is_df, cogs, self.bs_df.columns[i + 1]),
+                "='{}'!{}{}/({}+{})*2".format(
+                    IS, excel_cell(self.is_df, cogs, self.bs_df.columns[i + 1]), self.extra_bs,
                     excel_cell(self.bs_df, inventories, self.bs_df.columns[i]),
                     excel_cell(self.bs_df, inventories, self.bs_df.columns[i+1])
                 ) for i in range(len(self.bs_df.columns) - 1)
@@ -434,33 +444,35 @@ class ValuationMachine:
             prev_yr = self.bs_df.columns[-yrs_to_predict + i - 1]
 
             # Calculate variables
-            self.bs_df.at[cash_st_investments, cur_yr] = "='{}'!{}".format(
-                CF, excel_cell(self.cf_df, cash_balance, cur_yr)
+            self.bs_df.at[cash_st_investments, cur_yr] = "='{}'!{}{}".format(
+                CF, excel_cell(self.cf_df, cash_balance, cur_yr), self.extra_bs
             )
-            self.bs_df.at[st_receivables, cur_yr] = "={}/365*'{}'!{}".format(
-                excel_cell(self.bs_df, dso, cur_yr), IS, excel_cell(self.is_df, sales, cur_yr)
+            self.bs_df.at[st_receivables, cur_yr] = "={}/365*'{}'!{}{}".format(
+                excel_cell(self.bs_df, dso, cur_yr), IS, excel_cell(self.is_df, sales, cur_yr),
+                self.extra_bs
             )
             self.bs_df.at[other_cur_assets, cur_yr] = '={}*(1+{})'.format(
                 excel_cell(self.bs_df, other_cur_assets, prev_yr),
                 excel_cell(self.bs_df, other_cur_assets_growth, cur_yr)
             )
-            self.bs_df.at[net_property_plant_equipment, cur_yr] = "={}-'{}'!{}-'{}'!{}".format(
+            self.bs_df.at[net_property_plant_equipment, cur_yr] = "={}-'{}'!{}{}-'{}'!{}{}".format(
                 excel_cell(self.bs_df, net_property_plant_equipment, prev_yr), CF,
-                excel_cell(self.cf_df, deprec_deplet_n_amort, cur_yr), CF,
-                excel_cell(self.cf_df, capital_expenditures, cur_yr)
+                excel_cell(self.cf_df, deprec_deplet_n_amort, cur_yr), self.extra_bs, CF,
+                excel_cell(self.cf_df, capital_expenditures, cur_yr), self.extra_bs
             )
-            self.bs_df.at[accounts_payable, cur_yr] = "={}/365*'{}'!{}".format(
-                excel_cell(self.bs_df, dpo, cur_yr), IS, excel_cell(self.is_df, cogs, cur_yr)
+            self.bs_df.at[accounts_payable, cur_yr] = "={}/365*'{}'!{}{}".format(
+                excel_cell(self.bs_df, dpo, cur_yr), IS, excel_cell(self.is_df, cogs, cur_yr),
+                self.extra_bs
             )
             self.bs_df.at[other_cur_liabilities, cur_yr] = "={}*(1+{})".format(
                 excel_cell(self.bs_df, other_cur_liabilities, prev_yr),
                 excel_cell(self.bs_df, misc_cur_liabilities_growth, cur_yr)
             )
-            self.bs_df.at[total_equity, cur_yr] = "={}+'{}'!{}+'{}'!{}+'{}'!{}".format(
+            self.bs_df.at[total_equity, cur_yr] = "={}+'{}'!{}{}+'{}'!{}{}+'{}'!{}{}".format(
                 excel_cell(self.bs_df, total_equity, prev_yr), CF,
-                excel_cell(self.cf_df, change_in_capital_stock, cur_yr), IS,
-                excel_cell(self.is_df, net_income, cur_yr), CF,
-                excel_cell(self.cf_df, cash_div_paid, cur_yr)
+                excel_cell(self.cf_df, change_in_capital_stock, cur_yr), self.extra_bs, IS,
+                excel_cell(self.is_df, net_income, cur_yr), self.extra_bs, CF,
+                excel_cell(self.cf_df, cash_div_paid, cur_yr), self.extra_bs
             )
 
             # Sums
@@ -538,7 +550,9 @@ class ValuationMachine:
 
         # Insert cash balance
         self.cf_df.loc["Cash Balance"].iloc[-yrs_to_predict - 1:] = [
-            "='{}'!{}".format(BS, excel_cell(self.bs_df, cash_st_investments, last_given_yr))
+            "='{}'!{}{}".format(
+                BS, excel_cell(self.bs_df, cash_st_investments, last_given_yr), self.extra_cf
+            )
         ] + [
             '={}+{}'.format(
                 excel_cell(
@@ -619,21 +633,21 @@ class ValuationMachine:
                 self.cf_df, funds_from_operations, cur_yr
             )
 
-            self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(self.bs_df, st_receivables, prev_yr),
-                excel_cell(self.bs_df, other_cur_assets, prev_yr)
+                excel_cell(self.bs_df, other_cur_assets, prev_yr), self.extra_cf
             )
-            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(self.bs_df, st_receivables, cur_yr),
-                excel_cell(self.bs_df, other_cur_assets, cur_yr)
+                excel_cell(self.bs_df, other_cur_assets, cur_yr), self.extra_cf
             )
-            self.cf_df.at[changes_in_working_capital, cur_yr] += "+SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "+SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(self.bs_df, accounts_payable, cur_yr),
-                excel_cell(self.bs_df, other_cur_liabilities, cur_yr)
+                excel_cell(self.bs_df, other_cur_liabilities, cur_yr), self.extra_cf
             )
-            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{})".format(
+            self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(self.bs_df, accounts_payable, prev_yr),
-                excel_cell(self.bs_df, other_cur_liabilities, prev_yr)
+                excel_cell(self.bs_df, other_cur_liabilities, prev_yr), self.extra_cf
             )
 
             self.cf_df.at[capital_expenditures, cur_yr] = "=-'{}'!{}*{}".format(
@@ -644,9 +658,9 @@ class ValuationMachine:
                 IS, excel_cell(self.is_df, diluted_share_outstanding, cur_yr),
                 IS, excel_cell(self.is_df, div_per_share, cur_yr)
             )   
-            self.cf_df.at[net_inssuance_reduction_of_debt, cur_yr] = "='{}'!{}-'{}'!{}".format(
-                BS, excel_cell(self.bs_df, lt_debt, cur_yr),
-                BS, excel_cell(self.bs_df, lt_debt, prev_yr)
+            self.cf_df.at[net_inssuance_reduction_of_debt, cur_yr] = "='{}'!{}{}-'{}'!{}{}".format(
+                BS, excel_cell(self.bs_df, lt_debt, cur_yr), self.extra_cf,
+                BS, excel_cell(self.bs_df, lt_debt, prev_yr), self.extra_cf
             )
         empty_unmodified(self.cf_df, yrs_to_predict)
 
