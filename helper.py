@@ -9,7 +9,7 @@ PUNCTUATION = string.punctuation.replace('&', '').replace('-', '').replace('/', 
 
 
 def preprocess(df, yrs_to_consider):
-    """Data cleaning."""
+    """Cleanse data."""
     # Reverse columns
     df = df.loc[:, ::-1]
 
@@ -55,10 +55,11 @@ def preprocess(df, yrs_to_consider):
 
 
 def excel_cell(df, row_label, col_label, nearby_label=None):
-    """Returns corresponding excel cell position given row label and column label.
-    Note that if there are more than 26 columns, this function does not work properly."""
-    if not row_label:
-        assert("ERROR: excel_cell")
+    """
+    Return corresponding excel cell position given row label and column label.
+
+    Note that if there are more than 26 columns, this function does not work properly.
+    """
     letter = chr(ord('A') + df.columns.get_loc(col_label) + 2)
     row_mask = df.index.get_loc(row_label)
     if isinstance(row_mask, int):
@@ -71,7 +72,7 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
 
 
 def searched_label(labels, target):
-    """Returns target label from a list of DataFrame labels."""
+    """Return target label from a list of DataFrame labels."""
     score_dict = {label: 0 for label in labels}
     target = target.lower()
 
@@ -102,7 +103,7 @@ def searched_label(labels, target):
 
 
 def empty_unmodified(df, yrs_to_predict):
-    """Removes the unmodified rows from a DataFrame."""
+    """Remove the unmodified rows from a DataFrame."""
     unmodified = df.iloc[:, -yrs_to_predict] == '0'
     df.loc[unmodified, :] = np.nan
     df.index = [i if i not in list(df.index[unmodified]) else np.nan for i in list(df.index)]
@@ -130,13 +131,13 @@ def insert_after(df, new_df, label):
 
 
 def add_empty_row(df):
-    """Adds an empty row to the bottom of DataFrame."""
+    """Add an empty row to the bottom of DataFrame."""
     df.loc["null"] = np.nan
     df.index = list(df.index)[:-1] + [np.nan]
 
 
 def add_yr_column(df):
-    """Appends one empty column representing year into DataFrame."""
+    """Append one empty column representing year into DataFrame."""
     cur_yr = str(df.columns[len(df.columns) - 1])
     if cur_yr[-1] == 'E':
         cur_yr = str(int(cur_yr[:-1]) + 1) + 'E'
@@ -147,7 +148,7 @@ def add_yr_column(df):
 
 
 def add_growth_rate_row(df, label, new_label):
-    """Appends growth rate ratios to the bottom of DataFrame."""
+    """Append growth rate ratios to the bottom of DataFrame."""
     df.loc[new_label] = [np.nan] + [
         '={}/{}-1'.format(
             excel_cell(df, label, df.columns[i + 1]), excel_cell(df, label, df.columns[i])
@@ -156,7 +157,7 @@ def add_growth_rate_row(df, label, new_label):
 
 
 def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_excluded=0):
-    """Writes formulas for driver rows."""
+    """Write formulas for driver rows."""
     if row_label not in df.index:
         return
     if how == "round":
@@ -171,7 +172,7 @@ def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_exclude
 
 
 def fixed_extend(df, row_label, how, yrs):
-    """Predicts the corresponding row of data only using data from current row."""
+    """Predict the corresponding row of data only using data from current row."""
     if not row_label:
         print("Empty row_label in fixed_extend")
         return
@@ -182,7 +183,7 @@ def fixed_extend(df, row_label, how, yrs):
 
 
 def sum_formula(df, row_label, col_label, start_label=None, offset=0):
-    """Generalizes the sum procedure."""
+    """Generalize the sum procedure."""
     end_label = df.loc[:row_label].index[-2]
 
     if start_label:
@@ -200,7 +201,7 @@ def sum_formula(df, row_label, col_label, start_label=None, offset=0):
 
 
 def get_unit(df):
-    """Gets the unit of the items."""
+    """Get the unit of the items."""
     for label in df.index:
         if not isinstance(label, str):
             continue

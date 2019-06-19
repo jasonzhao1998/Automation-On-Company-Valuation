@@ -1,10 +1,10 @@
 """Main program's implementation."""
+from shutil import rmtree
+from datetime import datetime
 import os
 import openpyxl
 import numpy as np
 import pandas as pd
-from shutil import rmtree
-from datetime import datetime
 from openpyxl.utils.dataframe import dataframe_to_rows
 from style import style_ws
 from helper import *
@@ -12,7 +12,7 @@ from helper import *
 NAME = [
     "NFLX", "AAPL", "PG", "ADS", "AMGN", "AMZN", "CBRE", "COST", "CVX", "DAL", "FB",
     "GOOGL", "MMM", "NKE", "QCOM", "T", "TRIP"
-] # GS
+]  # GS
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
@@ -24,11 +24,15 @@ TODO:
     Optimize searched label.
 """
 
+
 class ValuationMachine:
     def __init__(self, name, growth_rates):
         self.name = name
         self.growth_rates = growth_rates
         self.yrs_to_predict = len(growth_rates)
+        self.is_df, self.bs_df, self.cf_df, self.mkt_df = None, None, None, None
+        self.is_unit, self.bs_unit, self.cf_unit, self.mkt_unit = None, None, None, None
+        self.fye = None  
 
     def read(self):
         self.is_df = pd.read_excel("asset/{} IS.xlsx".format(self.name), header=4, index_col=0)
@@ -48,14 +52,15 @@ class ValuationMachine:
 
         # FIXME
         if self.is_unit != self.bs_unit or self.bs_unit != self.cf_unit:
-            print("{} is:{}, bs:{}, cf:{}".format(self.name, self.is_unit, self.bs_unit, self.cf_unit))
-    
+            print("{} is:{}, bs:{}, cf:{}".format(
+                self.name, self.is_unit, self.bs_unit, self.cf_unit
+            ))
+
         if self.mkt_unit != self.is_unit:
             if self.mkt_unit == 'm':
                 self.mkt_multiplier = 0.001
-            else:  # FIXME
-                print("Market unit bigger")
-                exit(1)
+            print("Market unit bigger")
+            exit(1)
         else:
             self.mkt_multiplier = 1
 
@@ -69,7 +74,6 @@ class ValuationMachine:
         else:
             self.extra_bs = ""
             self.extra_cf = ""
-
 
     def slice_data(self):
         if searched_label(self.is_df.index, "EBITDA"):
@@ -300,10 +304,9 @@ class ValuationMachine:
                 )
             else:
                 self.is_df.at[ebitda, cur_yr] = [
-                    np.nan, 
+                    np.nan,
                 ]
         empty_unmodified(self.is_df, yrs_to_predict)
-
 
     def process_bs(self):
         """Manipulates balance sheet."""
@@ -336,7 +339,7 @@ class ValuationMachine:
 
         # Cash flow statement labels
         deprec_deplet_n_amort = searched_label(self.cf_df.index,
-                                           "depreciation depletion amortization expense")
+                                               "depreciation depletion amortization expense")
         capital_expenditures = searched_label(self.cf_df.index, "capital expenditures")
         cash_div_paid = searched_label(self.cf_df.index, "cash dividends paid")
         change_in_capital_stock = searched_label(self.cf_df.index, "change in capital stock")
@@ -431,7 +434,7 @@ class ValuationMachine:
                     excel_cell(self.bs_df, total_liabilities_n_shareholders_equity, yr)
                 ), np.nan] for yr in self.bs_df.columns
             }, index=["Balance", np.nan]
-        )   
+        )
         self.bs_df = insert_before(self.bs_df, balance_df, "working capital")
 
         # Calculate driver ratios
@@ -514,7 +517,6 @@ class ValuationMachine:
 
         empty_unmodified(self.bs_df, yrs_to_predict)
 
-
     def process_cf(self):
         """Manipulates cash flow statement."""
         # Short-hands
@@ -545,7 +547,7 @@ class ValuationMachine:
                                                          "net issuance reduction of debt")
         net_financing_cf = searched_label(self.cf_df.index, "net financing cash flow")
         net_change_in_cash = searched_label(self.cf_df.index, "net change in cash")
-        capex_ratio = "Capital Expenditure Revenue Ratio"   
+        capex_ratio = "Capital Expenditure Revenue Ratio"
         other_funds_net_operating_ratio = "Other Funds Net Operating CF Ratio"
 
         # Income statement labels
@@ -651,13 +653,15 @@ class ValuationMachine:
 
             self.cf_df.at[changes_in_working_capital, cur_yr] = "=SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(
-                    self.bs_df, self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
+                    self.bs_df,
+                    self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
                     prev_yr
                 ), excel_cell(self.bs_df, other_cur_assets, prev_yr), self.extra_cf
             )
             self.cf_df.at[changes_in_working_capital, cur_yr] += "-SUM('{}'!{}:{}){}".format(
                 BS, excel_cell(
-                    self.bs_df, self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
+                    self.bs_df,
+                    self.bs_df.index[self.bs_df.index.get_loc(cash_st_investments) + 1],
                     cur_yr
                 ), excel_cell(self.bs_df, other_cur_assets, cur_yr), self.extra_cf
             )
@@ -677,7 +681,7 @@ class ValuationMachine:
             self.cf_df.at[cash_div_paid, cur_yr] = "=-'{}'!{}*'{}'!{}".format(
                 IS, excel_cell(self.is_df, diluted_share_outstanding, cur_yr),
                 IS, excel_cell(self.is_df, div_per_share, cur_yr)
-            )   
+            )
             self.cf_df.at[net_inssuance_reduction_of_debt, cur_yr] = "='{}'!{}{}-'{}'!{}{}".format(
                 BS, excel_cell(self.bs_df, lt_debt, cur_yr), self.extra_cf,
                 BS, excel_cell(self.bs_df, lt_debt, prev_yr), self.extra_cf
