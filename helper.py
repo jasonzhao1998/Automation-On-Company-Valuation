@@ -8,6 +8,51 @@ ROUNDING_DIGIT = 4
 PUNCTUATION = string.punctuation.replace('&', '').replace('-', '').replace('/', '')
 
 
+def preprocess(df):
+    """Data cleaning."""
+    # Reverse columns
+    df = df.loc[:, ::-1]
+
+    # Replace all '-' with 0
+    df = df.replace('-', 0)
+
+    # Delete current data
+    if df.iat[0, -1] == 'LTM':
+        df = df.iloc[:, :-1]
+
+    # Remove the row with number of days
+    df = df[1:]
+
+    # Change dates to only years
+    df.columns = [
+        '20' + ''.join([char for char in column if char.isdigit()]) for column in df.columns
+    ]
+
+    # Cast year data type
+    df.columns = df.columns.astype(int)
+
+    # Manage duplicate labels
+    ignore = [searched_label(df.index, 'other funds')]
+    unique_dict = {}
+
+    duplicate = []
+    for idx, label in enumerate(df.index):
+        if label in ignore:
+            continue
+        elif label in unique_dict:
+            duplicate.append(idx)
+        elif True in list(pd.notna(df.iloc[idx])):
+            unique_dict[label] = True
+    df = df.iloc[[i for i in range(len(df.index)) if i not in duplicate], :]
+
+    # Insert 4 empty rows
+    df = pd.concat(
+        [pd.DataFrame({yr: [np.nan] * 4 for yr in df.columns}, index=[np.nan] * 4), df]
+    )
+
+    return df
+
+
 def excel_cell(df, row_label, col_label, nearby_label=None):
     """Returns corresponding excel cell position given row label and column label.
     Note that if there are more than 26 columns, this function does not work properly."""
