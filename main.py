@@ -16,6 +16,7 @@ NAME = [
 IS = "Income Statement"
 BS = "Balance Sheet"
 CF = "Cashflow Statement"
+YRS_TO_CONSIDER = 5
 
 """
 TODO:
@@ -37,9 +38,9 @@ class ValuationMachine:
 
     def preprocess(self):
         self.fye = self.is_df.columns[1]
-        self.is_df = preprocess(self.is_df)
-        self.bs_df = preprocess(self.bs_df)
-        self.cf_df = preprocess(self.cf_df)
+        self.is_df = preprocess(self.is_df, YRS_TO_CONSIDER)
+        self.bs_df = preprocess(self.bs_df, YRS_TO_CONSIDER)
+        self.cf_df = preprocess(self.cf_df, YRS_TO_CONSIDER)
 
     def get_units(self):
         self.is_unit, self.bs_unit = get_unit(self.is_df), get_unit(self.bs_df)

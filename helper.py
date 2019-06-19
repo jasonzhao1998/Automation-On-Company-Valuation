@@ -8,7 +8,7 @@ ROUNDING_DIGIT = 4
 PUNCTUATION = string.punctuation.replace('&', '').replace('-', '').replace('/', '')
 
 
-def preprocess(df):
+def preprocess(df, yrs_to_consider):
     """Data cleaning."""
     # Reverse columns
     df = df.loc[:, ::-1]
@@ -50,6 +50,7 @@ def preprocess(df):
         [pd.DataFrame({yr: [np.nan] * 4 for yr in df.columns}, index=[np.nan] * 4), df]
     )
 
+    df = df.iloc[:, -yrs_to_consider:]
     return df
 
 
