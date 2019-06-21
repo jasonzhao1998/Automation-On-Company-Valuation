@@ -11,7 +11,7 @@ from helper import *
 
 NAME = [
     "NFLX", "AAPL", "PG", "ADS", "AMGN", "AMZN", "CBRE", "COST", "CVX", "DAL", "FB",
-    "GOOGL", "MMM", "NKE", "QCOM", "T", "TRIP"
+    "GOOGL", "MMM", "NKE", "QCOM", "T", "TRIP", "NVIDIA"
 ]  # GS
 IS = "Income Statement"
 BS = "Balance Sheet"
@@ -20,7 +20,6 @@ YRS_TO_CONSIDER = 5
 
 """
 TODO:
-    Customize number of years to consider.
     Optimize searched label.
 """
 
@@ -59,8 +58,9 @@ class ValuationMachine:
         if self.mkt_unit != self.is_unit:
             if self.mkt_unit == 'm':
                 self.mkt_multiplier = 0.001
-            print("Market unit bigger")
-            exit(1)
+            else:
+                print("Market unit bigger")
+                exit(1)
         else:
             self.mkt_multiplier = 1
 
