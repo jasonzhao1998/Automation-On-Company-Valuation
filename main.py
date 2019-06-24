@@ -6,7 +6,7 @@ import openpyxl
 import numpy as np
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
-from style import style_ws
+from style import style_ws, write_n_style_summary
 from helper import *
 
 NAME = [
@@ -31,7 +31,8 @@ class ValuationMachine:
         self.yrs_to_predict = len(growth_rates)
         self.is_df, self.bs_df, self.cf_df, self.mkt_df = None, None, None, None
         self.is_unit, self.bs_unit, self.cf_unit, self.mkt_unit = None, None, None, None
-        self.fye = None  
+        self.fye = None
+        self.wb = None
 
     def read(self):
         self.is_df = pd.read_excel("asset/{} IS.xlsx".format(self.name), header=4, index_col=0)
@@ -103,20 +104,20 @@ class ValuationMachine:
 
     def style(self):
         # Stylize excel sheets and output excel
-        wb = openpyxl.Workbook()
-        wb['Sheet'].title = IS
-        wb.create_sheet(BS)
-        wb.create_sheet(CF)
+        self.wb = openpyxl.Workbook()
+        self.wb['Sheet'].title = "Summary"
+        self.wb.create_sheet(IS)
+        self.wb.create_sheet(BS)
+        self.wb.create_sheet(CF)
         for r in dataframe_to_rows(self.is_df):
-            wb[IS].append(r)
+            self.wb[IS].append(r)
         for r in dataframe_to_rows(self.bs_df):
-            wb[BS].append(r)
+           self.wb[BS].append(r)
         for r in dataframe_to_rows(self.cf_df):
-            wb[CF].append(r)
-        style_ws(wb[IS], IS, self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit)
-        style_ws(wb[BS], BS, self.is_df, self.bs_df, self.cf_df, self.fye, self.bs_unit)
-        style_ws(wb[CF], CF, self.is_df, self.bs_df, self.cf_df, self.fye, self.cf_unit)
-        wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
+            self.wb[CF].append(r)
+        style_ws(self.wb[IS], IS, self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit)
+        style_ws(self.wb[BS], BS, self.is_df, self.bs_df, self.cf_df, self.fye, self.bs_unit)
+        style_ws(self.wb[CF], CF, self.is_df, self.bs_df, self.cf_df, self.fye, self.cf_unit)
 
     def process_is(self):
         """Manipulates income statement."""
@@ -172,8 +173,8 @@ class ValuationMachine:
 
         # Insert depreciation & amortization expense before SG&A expense
         dna_expense_df = pd.DataFrame(
-            {
-                yr: "='{}'!".format(CF) + excel_cell(
+            
+{                yr: "='{}'!".format(CF) + excel_cell(
                     self.cf_df, searched_label(
                         self.cf_df.index, "depreciation depletion & amortization expense"
                     ), yr
@@ -688,6 +689,11 @@ class ValuationMachine:
             )
         empty_unmodified(self.cf_df, yrs_to_predict)
 
+    def add_summary(self):
+        write_n_style_summary(self.wb["Summary"], self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit,
+        					  self.is_df.columns[-self.yrs_to_predict - 4:-self.yrs_to_predict + 2])
+        self.wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
+
 
 def main():
     """Call all methods."""
@@ -695,7 +701,7 @@ def main():
         rmtree('output')
     os.mkdir('output')
 
-    growth_rates = [0.5, 0.5, 0.5, 0.5, 0.5]
+    growth_rates = [0.2, 0.2, 0.2, 0.2, 0.2]
     for i in NAME:
         vm = ValuationMachine(i, growth_rates)
         vm.read()
@@ -706,6 +712,7 @@ def main():
         vm.process_bs()
         vm.process_cf()
         vm.style()
+        vm.add_summary()
 
 
 if __name__ == "__main__":
