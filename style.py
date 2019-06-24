@@ -2,10 +2,6 @@
 from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from helper import excel_cell, searched_label
 
-IS = "Income Statement"
-BS = "Balance Sheet"
-CF = "Cashflow Statement"
-
 
 def style_range(ws, start, end, fill=None, font=None, border=None,
                 alignment=None, percentage=False, currency=False):
@@ -82,10 +78,11 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
     ws[chr((ord('C') + ord(letter)) // 2) + '3'].font = Font(bold=True)
     ws[chr((ord('C') + ord(letter)) // 2) + '4'] = "FYE " + fye
     # Center across selection
-    ws[chr((ord('C') + ord(letter)) // 2) + '3'].alignment = Alignment(horizontal='centerContinuous')
-    ws[chr((ord('C') + ord(letter) + 1) // 2) + '3'].alignment = Alignment(horizontal='centerContinuous')
-    ws[chr((ord('C') + ord(letter)) // 2) + '4'].alignment = Alignment(horizontal='centerContinuous')
-    ws[chr((ord('C') + ord(letter) + 1) // 2) + '4'].alignment = Alignment(horizontal='centerContinuous')
+    temp = Alignment(horizontal='centerContinuous')
+    ws[chr((ord('C') + ord(letter)) // 2) + '3'].alignment = temp
+    ws[chr((ord('C') + ord(letter) + 1) // 2) + '3'].alignment = temp
+    ws[chr((ord('C') + ord(letter)) // 2) + '4'].alignment = temp
+    ws[chr((ord('C') + ord(letter) + 1) // 2) + '4'].alignment = temp
 
     # Year row style
     style_range(ws, 'C5', letter + '5', font=Font(bold=True, underline="single"),
@@ -134,74 +131,3 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
         start = excel_cell(cur_df, ratio, cur_df.columns[0])
         end = letter + str(int(start[1:]))
         style_range(ws, start, end, percentage=True)
-
-
-def write_n_style_summary(ws, is_df, bs_df, cf_df, fye, is_unit, years):
-    """Note that number of years is fixed here."""
-    border = Side(border_style="thin", color="000000")
-    ws.sheet_view.showGridLines = False  # No grid lines
-    ws.column_dimensions['B'].width = 30  # Change width of labels
-
-    # Header
-    ws['B2'] = "Financial Overview"
-    ws['B2'].font = Font(bold=True)
-    ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
-    if is_unit == 'm':
-        ws['B3'] = "($ in millions of U.S. Dollar)"
-    else:
-        ws['B3'] = "($ in billions of U.S. Dollar)"
-    ws['B3'].font = Font(italic=True)
-    ws['B3'].fill = PatternFill(fill_type='solid', fgColor='bababa')
-
-    # Summary Financials
-    ws.column_dimensions['C'].width = 15
-    ws['C5'] = "Summary Financials"
-    style_range(ws, 'C5', 'I5', fill=PatternFill(fill_type='solid', fgColor='bababa'),
-                font=Font(bold=True), alignment=Alignment(horizontal="centerContinuous"))
-    ws['C6'] = "FYE " + fye
-    style_range(ws, 'C6', 'I6', alignment=Alignment(horizontal="centerContinuous"),
-                border=Border(top=border, bottom=border))
-    for i in range(len(years)):
-        ws[chr(ord('D') + i) + '7'] = years[i]
-    style_range(ws, 'D7', 'I7', font=Font(bold=True, underline="single"), alignment=Alignment(horizontal="center"))
-    ws['C8'], ws['C9'] = "Revenue", "Growth %"
-    ws['C11'], ws['C12'], ws['C13'] = "Gross Profit", "Margin %", "Growth %"
-    ws['C15'], ws['C16'], ws['C17'] = "EBITDA", "Margin %", "Growth %"
-    ws['C19'],  ws['C20'] = "EPS", "Growth %"
-    ws['C22'], ws['C23'] = "ROA", "ROE"
-    for i in range(len(years)):
-        revenue = excel_cell(is_df, searched_label(is_df.index, "total sales"), years[i])
-        prev_revenue = chr(ord(revenue[0]) - 1) + revenue[1:]
-        ws[chr(ord('D') + i) + '8'] = "='{}'!{}".format(IS, revenue)
-        ws[chr(ord('D') + i) + '9'] = ws[chr(ord('D') + i) + '8'].value + "/'{}'!{}-1".format(
-            IS, prev_revenue
-        )
-        gross_profit = excel_cell(is_df, searched_label(is_df.index, "gross income"), years[i])
-        prev_gross_profit = chr(ord(gross_profit[0]) - 1) + gross_profit[1:]
-        ws[chr(ord('D') + i) + '11'] = "='{}'!{}".format(IS, gross_profit)
-        ws[chr(ord('D') + i) + '12'] = '=' + chr(ord('D') + i) + '11/' + chr(ord('D') + i) + '8'
-        ws[chr(ord('D') + i) + '13'] = ws[chr(ord('D') + i) + '11'].value  + "/'{}'!{} - 1".format(
-            IS, prev_gross_profit
-        )
-        ebitda = excel_cell(is_df, searched_label(is_df.index, "ebitda"), years[i])
-        prev_ebitda = chr(ord(ebitda[0]) - 1) + ebitda[1:]
-        ws[chr(ord('D') + i) + '15'] = "='{}'!{}".format(IS, ebitda)
-        ws[chr(ord('D') + i) + '16'] = '=' + chr(ord('D') + i) + '15/' + chr(ord('D') + i) + '8'
-        ws[chr(ord('D') + i) + '17'] = ws[chr(ord('D') + i) + '15'].value  + "/'{}'!{} - 1".format(
-            IS, prev_ebitda
-        )
-        eps = excel_cell(is_df, searched_label(is_df.index, "eps diluted"), years[i])
-        prev_eps = chr(ord(eps[0]) - 1) + eps[1:]
-        ws[chr(ord('D') + i) + '19'] = "='{}'!{}".format(IS, eps)
-        ws[chr(ord('D') + i) + '20'] = ws[chr(ord('D') + i) + '19'].value  + "/'{}'!{} - 1".format(
-            IS, prev_eps
-        )
-        ws[chr(ord('D') + i) + '22'] = years[i]
-        ws[chr(ord('D') + i) + '23'] = years[i]
-    style_range(ws, 'C23', 'I23', border=Border(bottom=border))
-    style_range(ws, 'C6', 'C23', border=Border(left=border))
-    style_range(ws, 'I6', 'I23', border=Border(right=border))
-    ws['C23'].border = Border(left=border, bottom=border)
-    ws['I23'].border = Border(right=border, bottom=border)
-    ws['C6'].border = Border(left=border, bottom=border, top=border)
-    ws['I6'].border = Border(right=border, bottom=border, top=border)

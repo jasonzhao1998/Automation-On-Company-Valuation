@@ -6,7 +6,8 @@ import openpyxl
 import numpy as np
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
-from style import style_ws, write_n_style_summary
+from style import style_ws, style_range
+from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from helper import *
 
 NAME = [
@@ -21,6 +22,7 @@ YRS_TO_CONSIDER = 5
 """
 TODO:
     Optimize searched label.
+    All divide by zero errors.
 """
 
 
@@ -173,8 +175,8 @@ class ValuationMachine:
 
         # Insert depreciation & amortization expense before SG&A expense
         dna_expense_df = pd.DataFrame(
-            
-{                yr: "='{}'!".format(CF) + excel_cell(
+            {               
+                yr: "='{}'!".format(CF) + excel_cell(
                     self.cf_df, searched_label(
                         self.cf_df.index, "depreciation depletion & amortization expense"
                     ), yr
@@ -358,8 +360,10 @@ class ValuationMachine:
             ]
             dso = "DSO"
         # Other current assets growth %
-        add_growth_rate_row(self.bs_df, other_cur_assets, "Other Current Assets Growth %")
-        other_cur_assets_growth = "Other Current Assets Growth %"
+        if sum(self.bs_df.loc[other_cur_assets]) != 0:
+            add_growth_rate_row(self.bs_df, other_cur_assets, "Other Current Assets Growth %")
+            other_cur_assets_growth = "Other Current Assets Growth %"
+        other_cur_assets_growth = None
         # DPO
         add_empty_row(self.bs_df)
         self.bs_df.loc["DPO"] = [
@@ -471,10 +475,11 @@ class ValuationMachine:
                     excel_cell(self.bs_df, dso, cur_yr), IS, excel_cell(self.is_df, sales, cur_yr),
                     self.extra_bs
                 )
-            self.bs_df.at[other_cur_assets, cur_yr] = '={}*(1+{})'.format(
-                excel_cell(self.bs_df, other_cur_assets, prev_yr),
-                excel_cell(self.bs_df, other_cur_assets_growth, cur_yr)
-            )
+            if other_cur_assets_growth:
+                self.bs_df.at[other_cur_assets, cur_yr] = '={}*(1+{})'.format(
+                    excel_cell(self.bs_df, other_cur_assets, prev_yr),
+                    excel_cell(self.bs_df, other_cur_assets_growth, cur_yr)
+                )
             self.bs_df.at[net_property_plant_equipment, cur_yr] = "={}-'{}'!{}{}-'{}'!{}{}".format(
                 excel_cell(self.bs_df, net_property_plant_equipment, prev_yr), CF,
                 excel_cell(self.cf_df, deprec_deplet_n_amort, cur_yr), self.extra_bs, CF,
@@ -690,9 +695,98 @@ class ValuationMachine:
         empty_unmodified(self.cf_df, yrs_to_predict)
 
     def add_summary(self):
-        write_n_style_summary(self.wb["Summary"], self.is_df, self.bs_df, self.cf_df, self.fye, self.is_unit,
-        					  self.is_df.columns[-self.yrs_to_predict - 4:-self.yrs_to_predict + 2])
+        self.write_n_style_summary(self.is_df.columns[-self.yrs_to_predict - 4:-self.yrs_to_predict + 3])
         self.wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
+
+    def write_n_style_summary(self, years):
+        """Note that number of years is fixed here."""
+        ws = self.wb["Summary"]
+
+        border = Side(border_style="thin", color="000000")
+        ws.sheet_view.showGridLines = False  # No grid lines
+        ws.column_dimensions['B'].width = 30  # Change width of labels
+
+        # Header
+        ws['B2'] = "Financial Overview"
+        ws['B2'].font = Font(bold=True)
+        ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+        if self.is_unit == 'm':
+            ws['B3'] = "($ in millions of U.S. Dollar)"
+        else:
+            ws['B3'] = "($ in billions of U.S. Dollar)"
+        ws['B3'].font = Font(italic=True)
+        ws['B3'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+
+        # Summary Financials
+        end = chr(ord('C') + len(years))
+        ws.column_dimensions['C'].width = 15
+        ws['C5'] = "Summary Financials"
+        style_range(ws, 'C5', end + '5', fill=PatternFill(fill_type='solid', fgColor='bababa'),
+                    font=Font(bold=True), alignment=Alignment(horizontal="centerContinuous"))
+        ws['C6'] = "FYE " + self.fye
+        style_range(ws, 'C6', end + '6', alignment=Alignment(horizontal="centerContinuous"),
+                    border=Border(top=border, bottom=border))
+        for i in range(len(years)):
+            ws[chr(ord('D') + i) + '7'] = years[i]
+        style_range(ws, 'D7', end + '7', font=Font(bold=True, underline="single"),
+                    alignment=Alignment(horizontal="center"))
+        ws['C8'], ws['C9'] = "Revenue", "Growth %"
+        ws['C11'], ws['C12'], ws['C13'] = "Gross Profit", "Margin %", "Growth %"
+        ws['C15'], ws['C16'], ws['C17'] = "EBITDA", "Margin %", "Growth %"
+        ws['C19'],  ws['C20'] = "EPS", "Growth %"
+        ws['C22'], ws['C23'] = "ROA", "ROE"
+        for i in range(len(years)):
+            revenue = excel_cell(self.is_df, searched_label(self.is_df.index, "total sales"), years[i])
+            prev_revenue = chr(ord(revenue[0]) - 1) + revenue[1:]
+            ws[chr(ord('D') + i) + '8'] = "='{}'!{}".format(IS, revenue)
+            ws[chr(ord('D') + i) + '9'] = ws[chr(ord('D') + i) + '8'].value + "/'{}'!{}-1".format(
+                IS, prev_revenue
+            )
+            gross_profit = excel_cell(self.is_df, searched_label(self.is_df.index, "gross income"), years[i])
+            prev_gross_profit = chr(ord(gross_profit[0]) - 1) + gross_profit[1:]
+            ws[chr(ord('D') + i) + '11'] = "='{}'!{}".format(IS, gross_profit)
+            ws[chr(ord('D') + i) + '12'] = '=' + chr(ord('D') + i) + '11/' + chr(ord('D') + i) + '8'
+            ws[chr(ord('D') + i) + '13'] = ws[chr(ord('D') + i) + '11'].value  + "/'{}'!{} - 1".format(
+                IS, prev_gross_profit
+            )
+            ebitda = excel_cell(self.is_df, searched_label(self.is_df.index, "ebitda"), years[i])
+            prev_ebitda = chr(ord(ebitda[0]) - 1) + ebitda[1:]
+            ws[chr(ord('D') + i) + '15'] = "='{}'!{}".format(IS, ebitda)
+            ws[chr(ord('D') + i) + '16'] = '=' + chr(ord('D') + i) + '15/' + chr(ord('D') + i) + '8'
+            ws[chr(ord('D') + i) + '17'] = ws[chr(ord('D') + i) + '15'].value  + "/'{}'!{} - 1".format(
+                IS, prev_ebitda
+            )
+            eps = excel_cell(self.is_df, searched_label(self.is_df.index, "eps diluted"), years[i])
+            prev_eps = chr(ord(eps[0]) - 1) + eps[1:]
+            ws[chr(ord('D') + i) + '19'] = "='{}'!{}".format(IS, eps)
+            ws[chr(ord('D') + i) + '20'] = ws[chr(ord('D') + i) + '19'].value  + "/'{}'!{} - 1".format(
+                IS, prev_eps
+            )
+            net_income = excel_cell(self.is_df, searched_label(self.is_df.index, "net income"), years[i])
+            total_assets = excel_cell(self.bs_df, searched_label(self.bs_df.index, "total assets"), years[i])
+            total_equity = excel_cell(self.bs_df, searched_label(self.bs_df.index, "total equity"), years[i])
+            temp = "='{}'!{}/'{}'!".format(IS, net_income, BS)
+            ws[chr(ord('D') + i) + '22'] = temp + total_assets + self.extra_bs
+            ws[chr(ord('D') + i) + '23'] = temp + total_equity + self.extra_bs
+        style_range(ws, 'C8', end + '8', font=Font(bold=True), currency=True)
+        style_range(ws, 'C11', end + '11', font=Font(bold=True), currency=True)
+        style_range(ws, 'C15', end + '15', font=Font(bold=True), currency=True)
+        style_range(ws, 'C19', end + '19', font=Font(bold=True))
+        style_range(ws, 'C9', end + '9', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C12', end + '12', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C13', end + '13', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C16', end + '16', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C17', end + '17', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C20', end + '20', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C22', end + '22', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C23', end + '23', font=Font(italic=True), percentage=True)
+        style_range(ws, 'C23', end + '23', border=Border(bottom=border))
+        style_range(ws, 'C6', 'C23', border=Border(left=border))
+        style_range(ws, end + '6', end + '23', border=Border(right=border))
+        ws['C23'].border = Border(left=border, bottom=border)
+        ws[end + '23'].border = Border(right=border, bottom=border)
+        ws['C6'].border = Border(left=border, bottom=border, top=border)
+        ws[end + '6'].border = Border(right=border, bottom=border, top=border)
 
 
 def main():
