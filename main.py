@@ -23,6 +23,7 @@ YRS_TO_CONSIDER = 5
 TODO:
     Optimize searched label.
     All divide by zero errors.
+    Red and blue style.
 """
 
 
@@ -344,7 +345,7 @@ class ValuationMachine:
         deprec_deplet_n_amort = searched_label(self.cf_df.index,
                                                "depreciation depletion amortization expense")
         capital_expenditures = searched_label(self.cf_df.index, "capital expenditures")
-        cash_div_paid = searched_label(self.cf_df.index, "cash dividends paid")
+        cash_div_paid = searched_label(self.cf_df.index, "cash dividends paid", True)
         change_in_capital_stock = searched_label(self.cf_df.index, "change in capital stock")
 
         # Add driver rows to balance sheet
@@ -363,7 +364,8 @@ class ValuationMachine:
         if sum(self.bs_df.loc[other_cur_assets]) != 0:
             add_growth_rate_row(self.bs_df, other_cur_assets, "Other Current Assets Growth %")
             other_cur_assets_growth = "Other Current Assets Growth %"
-        other_cur_assets_growth = None
+        else:
+            other_cur_assets_growth = None
         # DPO
         add_empty_row(self.bs_df)
         self.bs_df.loc["DPO"] = [
@@ -454,7 +456,6 @@ class ValuationMachine:
         driver_extend(self.bs_df, inventory_ratio, "avg", last_given_yr, yrs_to_predict)
 
         # Calculate total liabilities & shareholders' equity
-
         self.bs_df.loc[total_liabilities_n_shareholders_equity] = [
             '={}+{}'.format(
                 excel_cell(self.bs_df, total_liabilities, yr),
@@ -493,12 +494,15 @@ class ValuationMachine:
                 excel_cell(self.bs_df, other_cur_liabilities, prev_yr),
                 excel_cell(self.bs_df, misc_cur_liabilities_growth, cur_yr)
             )
-            self.bs_df.at[total_equity, cur_yr] = "={}+'{}'!{}{}+'{}'!{}{}+'{}'!{}{}".format(
+            self.bs_df.at[total_equity, cur_yr] = "={}+'{}'!{}{}+'{}'!{}{}".format(
                 excel_cell(self.bs_df, total_equity, prev_yr), CF,
                 excel_cell(self.cf_df, change_in_capital_stock, cur_yr), self.extra_bs, IS,
-                excel_cell(self.is_df, net_income, cur_yr), self.extra_bs, CF,
-                excel_cell(self.cf_df, cash_div_paid, cur_yr), self.extra_bs
+                excel_cell(self.is_df, net_income, cur_yr), self.extra_bs
             )
+            if cash_div_paid:
+                self.bs_df.at[total_equity, cur_yr] += "+'{}'!{}{}".format(
+                    CF, excel_cell(self.cf_df, cash_div_paid, cur_yr), self.extra_bs
+                )
 
             # Sums
             self.bs_df.at[total_cur_assets, cur_yr] = '=' + sum_formula(
@@ -547,7 +551,7 @@ class ValuationMachine:
         purchase_sale_of_investments = searched_label(self.cf_df.index,
                                                       "purchasesale of investments")
         net_investing_cf = searched_label(self.cf_df.index, "net investing cash flow")
-        cash_div_paid = searched_label(self.cf_df.index, "cash dividends paid")
+        cash_div_paid = searched_label(self.cf_df.index, "cash dividends paid", precise=True)
         change_in_capital_stock = searched_label(self.cf_df.index, "change in capital stock")
         net_inssuance_reduction_of_debt = searched_label(self.cf_df.index,
                                                          "net issuance reduction of debt")
@@ -684,10 +688,11 @@ class ValuationMachine:
                 IS, excel_cell(self.is_df, sales, cur_yr),
                 excel_cell(self.cf_df, capex_ratio, cur_yr)
             )
-            self.cf_df.at[cash_div_paid, cur_yr] = "=-'{}'!{}*'{}'!{}".format(
-                IS, excel_cell(self.is_df, diluted_share_outstanding, cur_yr),
-                IS, excel_cell(self.is_df, div_per_share, cur_yr)
-            )
+            if cash_div_paid:
+                self.cf_df.at[cash_div_paid, cur_yr] = "=-'{}'!{}*'{}'!{}".format(
+                    IS, excel_cell(self.is_df, diluted_share_outstanding, cur_yr),
+                    IS, excel_cell(self.is_df, div_per_share, cur_yr)
+                )
             self.cf_df.at[net_inssuance_reduction_of_debt, cur_yr] = "='{}'!{}{}-'{}'!{}{}".format(
                 BS, excel_cell(self.bs_df, lt_debt, cur_yr), self.extra_cf,
                 BS, excel_cell(self.bs_df, lt_debt, prev_yr), self.extra_cf
@@ -895,9 +900,10 @@ class ValuationMachine:
             total_equity_val += "'{}'!{}/(1+{})^{}+".format(CF, excel_cell(
                 self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"), str(yr) + 'E'
             ), end + '12', i + 1)
-        total_equity_val += '{}/(1+{})^{}'.format(end + '13', end + '12', total_equity_val[-1])
-        print(total_equity_val)
+        total_equity_val += '{}/(1+{})^{}'.format(end + '13', end + '12', total_equity_val[-2])
+        ws[end + '14'] = total_equity_val
         ws[end + '15'] = '={}/{}'.format(end + '14', d_so)
+
 
 def main():
     """Call all methods."""

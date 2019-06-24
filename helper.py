@@ -71,7 +71,7 @@ def excel_cell(df, row_label, col_label, nearby_label=None):
         return letter + str(3 + matched_indices[distance_vals.index(min(distance_vals))])
 
 
-def searched_label(labels, target):
+def searched_label(labels, target, precise=False):
     """Return target label from a list of DataFrame labels."""
     score_dict = {label: 0 for label in labels}
     target = target.lower()
@@ -97,6 +97,8 @@ def searched_label(labels, target):
     for word in "".join(['' if c in PUNCTUATION else c.replace('-', ' ').replace('/', ' ') for c in str(result).lower()]).split():
         if word not in target:
             miss += 2
+    if precise:
+        miss += 1
     if miss > 2:
         return None
     return result

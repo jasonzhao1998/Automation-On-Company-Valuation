@@ -4,7 +4,7 @@ from helper import excel_cell, searched_label
 
 
 def style_range(ws, start, end, fill=None, font=None, border=None,
-                alignment=None, percentage=False, currency=False, multiple=True):
+                alignment=None, percentage=False, currency=False, multiple=False):
     """Change excel style for a column or row."""
     letter1, num1 = start[0], start[1:]
     letter2, num2 = end[0], end[1:]
@@ -103,13 +103,18 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
                         border=Border(top=border), currency=True)
 
     # Style specific rows
-    def style_row(ws, label, df, border_bool=True, bold_bool=True,
+    def style_row(ws, label, df, border_bool=True, bold_bool=True, italic_bool=False,
                   underline=None, currency=False):
         num = str(int(excel_cell(df, searched_label(df.index, label), df.columns[0])[1:]))
         ws['B' + num].font = Font(bold=True, underline=underline)
         border_style = Border(top=border) if border_bool else Border()
-        bold_style = Font(bold=True) if bold_bool else Font()
-        style_range(ws, 'C' + num, letter + num, font=bold_style, border=border_style,
+        if bold_bool:
+            font_style = Font(bold=True)
+        elif italic_bool:
+            font_style = Font(italic=True)
+        else:
+            font_style = Font()
+        style_range(ws, 'C' + num, letter + num, font=font_style, border=border_style,
                     currency=currency)
 
     if sheet_name == "Income Statement":
@@ -122,6 +127,7 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
         style_row(ws, "total shareholder equity", cur_df, bold_bool=False, border_bool=False,
                   currency=True)
         style_row(ws, "total liabilit shareholder equity", cur_df, border_bool=False)
+        style_row(ws, "balance", cur_df, border_bool=False, bold_bool=False, italic_bool=True)
     elif sheet_name == "Cashflow Statement":
         style_row(ws, "net operating cash flow cf", cur_df, currency=True)
         style_row(ws, "cash balance", cur_df, border_bool=False, currency=True)
