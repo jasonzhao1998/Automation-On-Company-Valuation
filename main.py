@@ -701,6 +701,9 @@ class ValuationMachine:
     def write_n_style_summary(self, years):
         """Note that number of years is fixed here."""
         ws = self.wb["Summary"]
+        dark = PatternFill(fill_type='solid', fgColor='bababa')
+        light = fill=PatternFill(fill_type='solid', fgColor='dddddd')
+        align = alignment=Alignment(horizontal="centerContinuous")
 
         border = Side(border_style="thin", color="000000")
         ws.sheet_view.showGridLines = False  # No grid lines
@@ -709,22 +712,21 @@ class ValuationMachine:
         # Header
         ws['B2'] = "Financial Overview"
         ws['B2'].font = Font(bold=True)
-        ws['B2'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+        ws['B2'].fill = dark
         if self.is_unit == 'm':
             ws['B3'] = "($ in millions of U.S. Dollar)"
         else:
             ws['B3'] = "($ in billions of U.S. Dollar)"
         ws['B3'].font = Font(italic=True)
-        ws['B3'].fill = PatternFill(fill_type='solid', fgColor='bababa')
+        ws['B3'].fill = dark
 
         # Summary Financials
         end = chr(ord('C') + len(years))
         ws.column_dimensions['C'].width = 15
         ws['C5'] = "Summary Financials"
-        style_range(ws, 'C5', end + '5', fill=PatternFill(fill_type='solid', fgColor='bababa'),
-                    font=Font(bold=True), alignment=Alignment(horizontal="centerContinuous"))
+        style_range(ws, 'C5', end + '5', fill=dark, font=Font(bold=True), alignment=align)
         ws['C6'] = "FYE " + self.fye
-        style_range(ws, 'C6', end + '6', alignment=Alignment(horizontal="centerContinuous"),
+        style_range(ws, 'C6', end + '6', alignment=align,
                     border=Border(top=border, bottom=border))
         for i in range(len(years)):
             ws[chr(ord('D') + i) + '7'] = years[i]
@@ -733,8 +735,7 @@ class ValuationMachine:
         ws['C8'], ws['C9'] = "Revenue", "Growth %"
         ws['C11'], ws['C12'], ws['C13'] = "Gross Profit", "Margin %", "Growth %"
         ws['C15'], ws['C16'], ws['C17'] = "EBITDA", "Margin %", "Growth %"
-        ws['C19'],  ws['C20'] = "EPS", "Growth %"
-        ws['C22'], ws['C23'] = "ROA", "ROE"
+        ws['C19'],  ws['C20'], ws['C22'], ws['C23'] = "EPS", "Growth %", "ROA", "ROE"
         for i in range(len(years)):
             revenue = excel_cell(self.is_df, searched_label(self.is_df.index, "total sales"), years[i])
             prev_revenue = chr(ord(revenue[0]) - 1) + revenue[1:]
@@ -780,14 +781,123 @@ class ValuationMachine:
         style_range(ws, 'C20', end + '20', font=Font(italic=True), percentage=True)
         style_range(ws, 'C22', end + '22', font=Font(italic=True), percentage=True)
         style_range(ws, 'C23', end + '23', font=Font(italic=True), percentage=True)
-        style_range(ws, 'C23', end + '23', border=Border(bottom=border))
-        style_range(ws, 'C6', 'C23', border=Border(left=border))
-        style_range(ws, end + '6', end + '23', border=Border(right=border))
-        ws['C23'].border = Border(left=border, bottom=border)
-        ws[end + '23'].border = Border(right=border, bottom=border)
-        ws['C6'].border = Border(left=border, bottom=border, top=border)
-        ws[end + '6'].border = Border(right=border, bottom=border, top=border)
+        style_range(ws, 'C24', end + '24', border=Border(top=border))
+        style_range(ws, 'B6', 'B23', border=Border(right=border))
+        style_range(ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '23', border=Border(left=border))
 
+        # Captilization
+        start, end = chr(ord(end) + 3), chr(ord(end) + 4)
+        ws.column_dimensions[start].width = 25
+        ws[start + '5'], ws[start + '7'] = "Capitalization", "Cash and ST Investments"
+        ws[start + '8'], ws[start + '9'], ws[start + '11'] = "Debt", "Net Debt", "Share Price"
+        ws[start + '12'], ws[start + '13'] = "D/SO", "Market Cap"
+        ws[start + '14'] = "Enterprise Value"
+        style_range(ws, start + '5', end + '5', font=Font(bold=True), fill=dark,
+                    alignment=align, border=Border(bottom=border))
+        style_range(ws, start + '9', end + '9', font=Font(bold=True), border=Border(top=border))
+        style_range(ws, start + '13', end + '13', border=Border(top=border))
+        style_range(ws, start + '14', end + '14', font=Font(bold=True), border=Border(top=border, bottom=border))
+        style_range(ws, chr(ord(start) - 1) + '6', chr(ord(start) - 1) + '14', border=Border(right=border))
+        style_range(ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '14', border=Border(left=border))
+        ws[end + '9'] = '={}8-{}7'.format(end, end)
+        ws[end + '12'] = "='{}'!{}".format(IS, excel_cell(
+            self.is_df,
+            searched_label(self.is_df.index, "diluted shares outstanding"),
+            self.is_df.columns[-self.yrs_to_predict]
+        ))
+        ws[end + '13'] = '={}11*{}12'.format(end, end)
+        ws[end + '14'] = '={}13+{}9'.format(end, end)
+        share_price = start + '11'
+        ev  = start + '14'
+        d_so = start + '12'
+
+        # Long term cash growth rate
+        ws[start + '16'] = "Long Term Cash Growth Rate"
+        ws[start + '17'], ws[start + '18'], ws[start + '19'] = "Bull", "Upside", "Base"
+        ws[start + '20'], ws[start + '21'] = "Downside", "Bear"
+        style_range(ws, start + '17', start + '21', light)
+        lt_cash_rate = start + '16'
+
+        # Valuation
+        pred_years = [int(yr[:-1]) for yr in years if isinstance(yr, str)]
+        num_pred = len(pred_years)
+        start, end = chr(ord(end) + 3), chr(ord(end) + 2 + 3 * num_pred)
+        ws[start + '5'] = "Valuation"
+        style_range(ws, start + '5', end + '5', fill=dark, font=Font(bold=True),
+                    border=Border(bottom=border), alignment=align)
+        for i in range(num_pred):
+            yr_start = chr(ord(start) + i * num_pred)
+            yr_mid = chr(ord(start) + 1 + i * num_pred)
+            yr_end = chr(ord(start) + 2 + i * num_pred)
+            ws.column_dimensions[yr_start].width = 11
+            ws.column_dimensions[yr_mid].width = 11
+            ws.column_dimensions[yr_end].width = 11
+            ws[yr_mid + '6'] = pred_years[i]
+            ws[yr_mid + '6'].font = Font(bold=True)
+            ws[yr_mid + '6'].alignment = Alignment(horizontal='center')
+            ws[yr_start + '6'].border = Border(left=border)
+            ws[yr_end + '6'].border = Border(right=border)
+            ws[yr_start + '7'], ws[yr_mid + '7'] = 'P/E', 'EV/EBITDA'
+            ws[yr_end + '7'] = 'EV/Sales'
+            ws[yr_start + '8'] = "={}/'{}'!{}".format(share_price, IS,
+                excel_cell(
+                    self.is_df, searched_label(self.is_df.index, "eps diluted"),
+                    str(pred_years[i]) + 'E'
+                )
+            )
+            ws[yr_mid + '8'] = "={}/'{}'!{}".format(ev, IS,
+                excel_cell(
+                    self.is_df, searched_label(self.is_df.index, "ebitda"),
+                    str(pred_years[i]) + 'E'
+                )
+            )
+            ws[yr_end + '8'] = "={}/'{}'!{}".format(ev, IS,
+                excel_cell(
+                    self.is_df, searched_label(self.is_df.index, "total sales"),
+                    str(pred_years[i]) + 'E'
+                )
+            )
+        style_range(ws, start + '7', end + '7', font=Font(bold=True),
+                    alignment=Alignment(horizontal='center'),
+                    border=Border(top=border, left=border, bottom=border, right=border))
+        style_range(ws, start + '8', end + '8', multiple=True,
+                    border=Border(top=border, left=border, bottom=border, right=border))
+
+        # Discounted Cash Flow
+        end = chr(ord(start))
+        start = chr(ord(start) - 1)
+        ws.column_dimensions[start].width = 20
+        ws[start + '11'] = "Discounted Cash Flow"
+        style_range(ws, start + '11', end + '11', border=Border(bottom=border), font=Font(bold=True),
+                    fill=light, alignment=align)
+        ws[start + '12'], ws[start + '13'] = "Cost of Equity", "Terminal Value"
+        ws[start + '14'], ws[start + '15'] = "Total Equity Value", "Target Price"
+        ws[start + '15'].font = Font(bold=True)
+        style_range(ws, start + '12', start + '15',
+                    border=Border(bottom=border, top=border, left=border, right=border))
+        style_range(ws, end + '12', end + '15',
+                    border=Border(bottom=border, top=border, left=border, right=border))
+        div_per_share = "'{}'!{}".format(IS, excel_cell(
+            self.is_df, searched_label(self.is_df.index, "dividends per share"),
+            self.is_df.columns[-self.yrs_to_predict]
+        ))
+        prev_div_per_share = "'{}'!{}".format(IS, excel_cell(
+            self.is_df, searched_label(self.is_df.index, "dividends per share"),
+            self.is_df.columns[-self.yrs_to_predict - 1]
+        ))
+        ws[end + '12'] = "={}/{}+{}/{}-1".format(div_per_share, share_price, div_per_share,
+                                                 prev_div_per_share)
+        ws[end + '13'] = "='{}'!{}*(1+{})/({}-{})".format(CF, excel_cell(
+            self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"), self.cf_df.columns[-1]
+        ), lt_cash_rate, end + '12', lt_cash_rate)
+        total_equity_val = '='
+        for i, yr in enumerate(pred_years):
+            total_equity_val += "'{}'!{}/(1+{})^{}+".format(CF, excel_cell(
+                self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"), str(yr) + 'E'
+            ), end + '12', i + 1)
+        total_equity_val += '{}/(1+{})^{}'.format(end + '13', end + '12', total_equity_val[-1])
+        print(total_equity_val)
+        ws[end + '15'] = '={}/{}'.format(end + '14', d_so)
 
 def main():
     """Call all methods."""

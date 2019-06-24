@@ -4,7 +4,7 @@ from helper import excel_cell, searched_label
 
 
 def style_range(ws, start, end, fill=None, font=None, border=None,
-                alignment=None, percentage=False, currency=False):
+                alignment=None, percentage=False, currency=False, multiple=True):
     """Change excel style for a column or row."""
     letter1, num1 = start[0], start[1:]
     letter2, num2 = end[0], end[1:]
@@ -28,6 +28,8 @@ def style_range(ws, start, end, fill=None, font=None, border=None,
                 elif '+' in ws[chr(ord(letter1) + i) + num1].value:
                     return
                 ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
+            elif multiple:
+                ws[chr(ord(letter1) + i) + num1].number_format = '0.0 x'
     elif letter1 == letter2:  # column
         for i in range(int(num1), int(num2) + 1):
             if font:
@@ -39,7 +41,7 @@ def style_range(ws, start, end, fill=None, font=None, border=None,
             if alignment:
                 ws[letter1 + str(i)].alignment = alignment
     else:
-        print("ERROR: style_range")
+        print("ERROR: style_range", start, end)
         exit(1)
 
 
