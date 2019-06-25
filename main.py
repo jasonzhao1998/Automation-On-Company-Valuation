@@ -24,7 +24,6 @@ TODO:
     Optimize searched label.
     All divide by zero errors.
     Red and blue style.
-    Sales growth rate.
     Identation for style.
 """
 
@@ -968,6 +967,7 @@ def main():
 
     growth_rates = [0.2, 0.2, 0.2, 0.2, 0.2]
     for i in NAME:
+        print(i)
         vm = ValuationMachine(i, growth_rates)
         vm.read()
         vm.preprocess()

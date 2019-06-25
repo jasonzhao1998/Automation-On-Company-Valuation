@@ -136,5 +136,4 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
             continue
         start = 'C' + str(driver_i + i + 4)
         end = letter + str(int(start[1:]))
-        print(start, ratio)
         style_range(ws, start, end, percentage=True)

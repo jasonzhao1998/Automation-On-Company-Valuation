@@ -176,7 +176,6 @@ def driver_extend(df, row_label, how, last_given_yr, yrs_to_predict, num_exclude
 def fixed_extend(df, row_label, how, yrs):
     """Predict the corresponding row of data only using data from current row."""
     if not row_label:
-        print("Empty row_label in fixed_extend")
         return
     if how == "prev":
         df.at[row_label, df.columns[-yrs:]] = df.loc[row_label, df.columns[-yrs - 1]]
