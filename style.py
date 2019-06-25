@@ -1,4 +1,5 @@
 """Implementation for rendering excel output's style."""
+import pandas as pd
 from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from helper import excel_cell, searched_label
 
@@ -20,13 +21,7 @@ def style_range(ws, start, end, fill=None, font=None, border=None,
                 ws[chr(ord(letter1) + i) + num1].alignment = alignment
             if currency:
                 ws[chr(ord(letter1) + i) + num1].number_format = '$#,##'
-            elif percentage and isinstance(ws[chr(ord(letter1) + i) + num1].value, str):
-                if '365' in ws[chr(ord(letter1) + i) + num1].value:
-                    return
-                elif '366' in ws[chr(ord(letter1) + i) + num1].value:
-                    return
-                elif '+' in ws[chr(ord(letter1) + i) + num1].value:
-                    return
+            elif percentage:
                 ws[chr(ord(letter1) + i) + num1].number_format = '0.00%'
             elif multiple:
                 ws[chr(ord(letter1) + i) + num1].number_format = '0.0 x'
@@ -135,7 +130,11 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
     driver_df = cur_df.loc["Driver Ratios":]
 
     # Driver ratios style
-    for ratio in driver_df[driver_df.index.notna()].iloc[1:].index:
-        start = excel_cell(cur_df, ratio, cur_df.columns[0])
+    driver_i = cur_df.index.get_loc("Driver Ratios")
+    for i, ratio in enumerate(driver_df.iloc[1:].index):
+        if pd.isna(ratio) or ratio == "DPO" or ratio == "DSO" or ratio == "Levered Free Cash Flow":
+            continue
+        start = 'C' + str(driver_i + i + 4)
         end = letter + str(int(start[1:]))
+        print(start, ratio)
         style_range(ws, start, end, percentage=True)

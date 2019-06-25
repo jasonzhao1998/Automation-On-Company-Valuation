@@ -24,6 +24,8 @@ TODO:
     Optimize searched label.
     All divide by zero errors.
     Red and blue style.
+    Sales growth rate.
+    Identation for style.
 """
 
 
@@ -34,8 +36,7 @@ class ValuationMachine:
         self.yrs_to_predict = len(growth_rates)
         self.is_df, self.bs_df, self.cf_df, self.mkt_df = None, None, None, None
         self.is_unit, self.bs_unit, self.cf_unit, self.mkt_unit = None, None, None, None
-        self.fye = None
-        self.wb = None
+        self.fye, self.wb, self.case_col, self.case_rate_cells = None, None, None, []
 
     def read(self):
         self.is_df = pd.read_excel("asset/{} IS.xlsx".format(self.name), header=4, index_col=0)
@@ -218,8 +219,39 @@ class ValuationMachine:
         for i in range(yrs_to_predict):
             add_yr_column(self.is_df)
 
-        # Append growth rates to driver row
-        self.is_df.loc[sales_growth].iloc[-yrs_to_predict:] = self.growth_rates
+        # Set excel cell of case
+        self.case_col = chr(ord('B') + len(self.is_df.columns))
+
+        # Case insertions
+        def add_case(label, ratio_input=None):
+            # Label has to be exactly correct
+            prev_letter = chr(ord('B') + len(self.is_df.columns) - yrs_to_predict)
+            start_num = self.is_df.index.get_loc(label) + 5
+            case_df = pd.DataFrame(
+                {yr: [np.nan] * 5 for yr in self.is_df.columns},
+                index=["Bull", "Upside", "Base", "Downside", "Bear"]
+            )
+            case_rate_cell = '${}${}'.format(chr(ord(prev_letter) + 6), start_num + 2)
+            for i, yr in enumerate(self.is_df.columns[-yrs_to_predict:]):
+                cur_letter = chr(ord(prev_letter) + i + 1)
+                self.is_df.at[label, yr] = '=CHOOSE(${1}$2, {0}{2}, {0}{3}, {0}{4}, {0}{5}, {0}{6})'.format(
+                    cur_letter, self.case_col, start_num, start_num + 1, start_num + 2, start_num + 3, start_num + 4
+                )
+                if ratio_input:
+                    temp = ratio_input[i]
+                else:
+                    temp = '={}{}'.format(prev_letter, start_num - 1)
+                case_df[yr] = [
+                    '={}{}+{}'.format(cur_letter, start_num + 1, case_rate_cell),
+                    '={}{}+{}'.format(cur_letter, start_num + 2, case_rate_cell), temp,
+                    '={}{}-{}'.format(cur_letter, start_num + 2, case_rate_cell),
+                    '={}{}-{}'.format(cur_letter, start_num + 3, case_rate_cell)
+                ]
+            self.is_df = insert_after(self.is_df, case_df, label)
+            self.case_rate_cells.append(case_rate_cell[1] + case_rate_cell[3:])
+        add_case(sales_growth, self.growth_rates)
+        add_case(cogs_ratio)
+        add_case(sgna_ratio)
 
         # Write formulas for EBITDA
         ebitda_df = pd.DataFrame(
@@ -235,8 +267,6 @@ class ValuationMachine:
         initialize_ratio_row(self.is_df, div_per_share, diluted_eps, "Dividend Payout Ratio")
         initialize_ratio_row(self.is_df, ebitda, sales, "EBITDA Margin", sales_growth)
         self.is_df.loc[dna_ratio].iloc[-yrs_to_predict:] = self.is_df.loc[dna_ratio, last_given_yr]
-        driver_extend(self.is_df, cogs_ratio, "round", last_given_yr, yrs_to_predict)
-        driver_extend(self.is_df, sgna_ratio, "round", last_given_yr, yrs_to_predict)
         driver_extend(self.is_df, unusual_ratio, "avg", last_given_yr, yrs_to_predict)
         driver_extend(self.is_df, diluted_share_outstanding, "avg",
                       last_given_yr, yrs_to_predict, 3)
@@ -311,6 +341,7 @@ class ValuationMachine:
                     np.nan,
                 ]
         empty_unmodified(self.is_df, yrs_to_predict)
+
 
     def process_bs(self):
         """Manipulates balance sheet."""
@@ -700,11 +731,9 @@ class ValuationMachine:
         empty_unmodified(self.cf_df, yrs_to_predict)
 
     def add_summary(self):
-        self.write_n_style_summary(self.is_df.columns[-self.yrs_to_predict - 4:-self.yrs_to_predict + 3])
-        self.wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
-
-    def write_n_style_summary(self, years):
         """Note that number of years is fixed here."""
+        years = self.is_df.columns[-self.yrs_to_predict - 4:-self.yrs_to_predict + 3]
+
         ws = self.wb["Summary"]
         dark = PatternFill(fill_type='solid', fgColor='bababa')
         light = fill=PatternFill(fill_type='solid', fgColor='dddddd')
@@ -904,6 +933,32 @@ class ValuationMachine:
         ws[end + '14'] = total_equity_val
         ws[end + '15'] = '={}/{}'.format(end + '14', d_so)
 
+    def add_case_cells(self):
+        ws = self.wb[IS]
+        def style_cell(ws, excel_cell):
+            ws[excel_cell].font = Font(bold=True, color='0000FF')
+            ws[excel_cell].fill = PatternFill(fill_type='solid', fgColor='FFF2CC')
+            border = Side(border_style="medium", color="000000")
+            ws[excel_cell].border = Border(top=border, left=border, bottom=border, right=border)
+            ws[excel_cell].alignment = Alignment(horizontal="center")
+        ws[self.case_col + '2'] = 3
+        style_cell(ws, self.case_col + '2')
+        ws[chr(ord(self.case_col) - 1) + '2'] = "Case"
+        ws[chr(ord(self.case_col) - 1) + '2'].font = Font(bold=True)
+        ws[chr(ord(self.case_col) + 1) + '1'] = "1 - Bull"
+        ws[chr(ord(self.case_col) + 1) + '2'] = "2 - Upside"
+        ws[chr(ord(self.case_col) + 1) + '3'] = "3 - Base"
+        ws[chr(ord(self.case_col) + 1) + '4'] = "4 - Downside"
+        ws[chr(ord(self.case_col) + 1) + '5'] = "5 - Bear"
+
+        rates = [0.01, -0.01, 0.005]
+        for i, rate_cell in enumerate(self.case_rate_cells):
+            ws[rate_cell] = rates[i]
+            style_cell(ws, rate_cell)
+
+    def save_wb(self):
+        self.wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
+
 
 def main():
     """Call all methods."""
@@ -923,6 +978,8 @@ def main():
         vm.process_cf()
         vm.style()
         vm.add_summary()
+        vm.add_case_cells()
+        vm.save_wb()
 
 
 if __name__ == "__main__":
