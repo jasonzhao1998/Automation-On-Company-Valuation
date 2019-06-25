@@ -20,8 +20,8 @@ def preprocess(df, yrs_to_consider):
     if df.iat[0, -1] == 'LTM':
         df = df.iloc[:, :-1]
 
-    # Remove the row with number of days
-    df = df[1:]
+    # Remove the row with number of days & title
+    df = df[2:]
 
     # Change dates to only years
     df.columns = [
