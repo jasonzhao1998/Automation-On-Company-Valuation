@@ -22,7 +22,7 @@ def preprocess(df, yrs_to_consider):
 
     # Remove the row with number of days & title
     df = df[2:]
-    if df.index[0] == "Cash Flow" or df.index[0] == "Income Statement" or df.index[0] == "Balance Sheet":
+    if df.index[0] in ["Cash Flow", "Income Statement", "Balance Sheet"]:
         df = df[1:]
 
     # Change dates to only years

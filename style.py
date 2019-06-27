@@ -11,14 +11,10 @@ def style_range(ws, start, end, fill=None, font=None, border=None,
     letter2, num2 = end[0], end[1:]
     if num1 == num2:  # row
         for i in range(ord(letter2) - ord(letter1) + 1):
-            if font:
-                ws[chr(ord(letter1) + i) + num1].font = font
-            if fill:
-                ws[chr(ord(letter1) + i) + num1].fill = fill
-            if border:
-                ws[chr(ord(letter1) + i) + num1].border = border
-            if alignment:
-                ws[chr(ord(letter1) + i) + num1].alignment = alignment
+            ws[chr(ord(letter1) + i) + num1].font = font or Font()
+            ws[chr(ord(letter1) + i) + num1].fill = fill or PatternFill()
+            ws[chr(ord(letter1) + i) + num1].border = border or Border()
+            ws[chr(ord(letter1) + i) + num1].alignment = alignment or Alignment()
             if currency:
                 ws[chr(ord(letter1) + i) + num1].number_format = '$#,##'
             elif percentage:
@@ -27,14 +23,10 @@ def style_range(ws, start, end, fill=None, font=None, border=None,
                 ws[chr(ord(letter1) + i) + num1].number_format = '0.0 x'
     elif letter1 == letter2:  # column
         for i in range(int(num1), int(num2) + 1):
-            if font:
-                ws[letter1 + str(i)].font = font
-            if fill:
-                ws[letter1 + str(i)].fill = fill
-            if border:
-                ws[letter1 + str(i)].border = border
-            if alignment:
-                ws[letter1 + str(i)].alignment = alignment
+            ws[letter1 + str(i)].font = font or Font()
+            ws[letter1 + str(i)].fill = fill or PatternFill()
+            ws[letter1 + str(i)].border = border or Border()
+            ws[letter1 + str(i)].alignment = alignment or Alignment()
     else:
         print("ERROR: style_range", start, end)
         exit(1)
@@ -132,10 +124,10 @@ def style_ws(ws, sheet_name, is_df, bs_df, cf_df, fye, unit):
     # Driver ratios style
     driver_i = cur_df.index.get_loc("Driver Ratios")
     for i, ratio in enumerate(driver_df.iloc[1:].index):
-        if pd.isna(ratio) or ratio == "DPO" or ratio == "DSO" or ratio == "Levered Free Cash Flow":
+        if pd.isna(ratio) or ratio in ["DPO", "DSO", "Levered Free Cash Flow"]:
             continue
         start = 'C' + str(driver_i + i + 4)
         end = letter + str(int(start[1:]))
-        if ratio == "Bull" or ratio == "Upside" or ratio == "Base" or ratio == "Downside" or ratio == "Bear":
+        if ratio in ["Bull", "Upside", "Base", "Downside", "Bear"]:
             style_range(ws, start, end, font=Font(italic=True))
         style_range(ws, start, end, percentage=True)
