@@ -770,38 +770,49 @@ class ValuationMachine:
         ws['C15'], ws['C16'], ws['C17'] = "EBITDA", "Margin %", "Growth %"
         ws['C19'],  ws['C20'], ws['C22'], ws['C23'] = "EPS", "Growth %", "ROA", "ROE"
         for i in range(len(years)):
-            revenue = excel_cell(self.is_df, searched_label(self.is_df.index, "total sales"), years[i])
+            cur_col = chr(ord('D') + i)
+            revenue = excel_cell(
+                self.is_df, searched_label(self.is_df.index, "total sales"), years[i]
+            )
             prev_revenue = chr(ord(revenue[0]) - 1) + revenue[1:]
-            ws[chr(ord('D') + i) + '8'] = "='{}'!{}".format(IS, revenue)
-            ws[chr(ord('D') + i) + '9'] = ws[chr(ord('D') + i) + '8'].value + "/'{}'!{}-1".format(
+            ws[cur_col + '8'] = "='{}'!{}".format(IS, revenue)
+            ws[cur_col + '9'] = ws[cur_col + '8'].value + "/'{}'!{}-1".format(
                 IS, prev_revenue
             )
-            gross_profit = excel_cell(self.is_df, searched_label(self.is_df.index, "gross income"), years[i])
+            gross_profit = excel_cell(
+                self.is_df, searched_label(self.is_df.index, "gross income"), years[i]
+            )
             prev_gross_profit = chr(ord(gross_profit[0]) - 1) + gross_profit[1:]
-            ws[chr(ord('D') + i) + '11'] = "='{}'!{}".format(IS, gross_profit)
-            ws[chr(ord('D') + i) + '12'] = '=' + chr(ord('D') + i) + '11/' + chr(ord('D') + i) + '8'
-            ws[chr(ord('D') + i) + '13'] = ws[chr(ord('D') + i) + '11'].value  + "/'{}'!{} - 1".format(
+            ws[cur_col + '11'] = "='{}'!{}".format(IS, gross_profit)
+            ws[cur_col + '12'] = '=' + cur_col + '11/' + cur_col + '8'
+            ws[cur_col + '13'] = ws[cur_col + '11'].value  + "/'{}'!{} - 1".format(
                 IS, prev_gross_profit
             )
             ebitda = excel_cell(self.is_df, searched_label(self.is_df.index, "ebitda"), years[i])
             prev_ebitda = chr(ord(ebitda[0]) - 1) + ebitda[1:]
-            ws[chr(ord('D') + i) + '15'] = "='{}'!{}".format(IS, ebitda)
-            ws[chr(ord('D') + i) + '16'] = '=' + chr(ord('D') + i) + '15/' + chr(ord('D') + i) + '8'
-            ws[chr(ord('D') + i) + '17'] = ws[chr(ord('D') + i) + '15'].value  + "/'{}'!{} - 1".format(
+            ws[cur_col + '15'] = "='{}'!{}".format(IS, ebitda)
+            ws[cur_col + '16'] = '=' + cur_col + '15/' + cur_col + '8'
+            ws[cur_col + '17'] = ws[cur_col + '15'].value  + "/'{}'!{} - 1".format(
                 IS, prev_ebitda
             )
             eps = excel_cell(self.is_df, searched_label(self.is_df.index, "eps diluted"), years[i])
             prev_eps = chr(ord(eps[0]) - 1) + eps[1:]
-            ws[chr(ord('D') + i) + '19'] = "='{}'!{}".format(IS, eps)
-            ws[chr(ord('D') + i) + '20'] = ws[chr(ord('D') + i) + '19'].value  + "/'{}'!{} - 1".format(
+            ws[cur_col + '19'] = "='{}'!{}".format(IS, eps)
+            ws[cur_col + '20'] = ws[cur_col + '19'].value  + "/'{}'!{} - 1".format(
                 IS, prev_eps
             )
-            net_income = excel_cell(self.is_df, searched_label(self.is_df.index, "net income"), years[i])
-            total_assets = excel_cell(self.bs_df, searched_label(self.bs_df.index, "total assets"), years[i])
-            total_equity = excel_cell(self.bs_df, searched_label(self.bs_df.index, "total equity"), years[i])
+            net_income = excel_cell(
+                self.is_df, searched_label(self.is_df.index, "net income"), years[i]
+            )
+            total_assets = excel_cell(
+                self.bs_df, searched_label(self.bs_df.index, "total assets"), years[i]
+            )
+            total_equity = excel_cell(
+                self.bs_df, searched_label(self.bs_df.index, "total equity"), years[i]
+            )
             temp = "='{}'!{}/'{}'!".format(IS, net_income, BS)
-            ws[chr(ord('D') + i) + '22'] = temp + total_assets + self.extra_bs
-            ws[chr(ord('D') + i) + '23'] = temp + total_equity + self.extra_bs
+            ws[cur_col + '22'] = temp + total_assets + self.extra_bs
+            ws[cur_col + '23'] = temp + total_equity + self.extra_bs
         style_range(ws, 'C8', end + '8', font=Font(bold=True), currency=True)
         style_range(ws, 'C11', end + '11', font=Font(bold=True), currency=True)
         style_range(ws, 'C15', end + '15', font=Font(bold=True), currency=True)
@@ -816,7 +827,9 @@ class ValuationMachine:
         style_range(ws, 'C23', end + '23', font=Font(italic=True), percentage=True)
         style_range(ws, 'C24', end + '24', border=Border(top=border))
         style_range(ws, 'B6', 'B23', border=Border(right=border))
-        style_range(ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '23', border=Border(left=border))
+        style_range(
+            ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '23', border=Border(left=border)
+        )
 
         # Captilization
         start, end = chr(ord(end) + 3), chr(ord(end) + 4)
@@ -829,9 +842,16 @@ class ValuationMachine:
                     alignment=align, border=Border(bottom=border))
         style_range(ws, start + '9', end + '9', font=Font(bold=True), border=Border(top=border))
         style_range(ws, start + '13', end + '13', border=Border(top=border))
-        style_range(ws, start + '14', end + '14', font=Font(bold=True), border=Border(top=border, bottom=border))
-        style_range(ws, chr(ord(start) - 1) + '6', chr(ord(start) - 1) + '14', border=Border(right=border))
-        style_range(ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '14', border=Border(left=border))
+        style_range(
+            ws, start + '14', end + '14', font=Font(bold=True),
+            border=Border(top=border, bottom=border)
+        )
+        style_range(
+            ws, chr(ord(start) - 1) + '6', chr(ord(start) - 1) + '14', border=Border(right=border)
+        )
+        style_range(
+            ws, chr(ord(end) + 1) + '6', chr(ord(end) + 1) + '14', border=Border(left=border)
+        )
         ws[end + '9'] = '={}8-{}7'.format(end, end)
         ws[end + '12'] = "='{}'!{}".format(IS, excel_cell(
             self.is_df,
@@ -901,8 +921,8 @@ class ValuationMachine:
         start = chr(ord(start) - 1)
         ws.column_dimensions[start].width = 20
         ws[start + '11'] = "Discounted Cash Flow"
-        style_range(ws, start + '11', end + '11', border=Border(bottom=border), font=Font(bold=True),
-                    fill=light, alignment=align)
+        style_range(ws, start + '11', end + '11', border=Border(bottom=border),
+                    font=Font(bold=True), fill=light, alignment=align)
         ws[start + '12'], ws[start + '13'] = "Cost of Equity", "Terminal Value"
         ws[start + '14'], ws[start + '15'] = "Total Equity Value", "Target Price"
         ws[start + '15'].font = Font(bold=True)
@@ -921,12 +941,14 @@ class ValuationMachine:
         ws[end + '12'] = "={}/{}+{}/{}-1".format(div_per_share, share_price, div_per_share,
                                                  prev_div_per_share)
         ws[end + '13'] = "='{}'!{}*(1+{})/({}-{})".format(CF, excel_cell(
-            self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"), self.cf_df.columns[-1]
+            self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"),
+            self.cf_df.columns[-1]
         ), lt_cash_rate, end + '12', lt_cash_rate)
         total_equity_val = '='
         for i, yr in enumerate(pred_years):
             total_equity_val += "'{}'!{}/(1+{})^{}+".format(CF, excel_cell(
-                self.cf_df, searched_label(self.cf_df.index, "levered free cash flow"), str(yr) + 'E'
+                self.cf_df,
+                searched_label(self.cf_df.index, "levered free cash flow"), str(yr) + 'E'
             ), end + '12', i + 1)
         total_equity_val += '{}/(1+{})^{}'.format(end + '13', end + '12', total_equity_val[-2])
         ws[end + '14'] = total_equity_val
@@ -956,7 +978,9 @@ class ValuationMachine:
             style_cell(ws, rate_cell)
 
     def save_wb(self):
-        self.wb.save("output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S')))
+        self.wb.save(
+            "output/output_{}_{}.xlsx".format(self.name, datetime.now().strftime('%H-%M-%S'))
+        )
 
 
 def main():
