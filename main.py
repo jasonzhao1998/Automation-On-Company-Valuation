@@ -233,8 +233,9 @@ class ValuationMachine:
             case_rate_cell = '${}${}'.format(chr(ord(prev_letter) + 6), start_num + 2)
             for i, yr in enumerate(self.is_df.columns[-yrs_to_predict:]):
                 cur_letter = chr(ord(prev_letter) + i + 1)
-                self.is_df.at[label, yr] = '=CHOOSE(${1}$2, {0}{2}, {0}{3}, {0}{4}, {0}{5}, {0}{6})'.format(
-                    cur_letter, self.case_col, start_num, start_num + 1, start_num + 2, start_num + 3, start_num + 4
+                self.is_df.at[label, yr] = '=CHOOSE(${}$2{})'.format(
+                    self.case_col,
+                    "".join([', {}{}'.format(cur_letter, start_num + i) for i in range(5)])
                 )
                 if ratio_input:
                     temp = ratio_input[i]
